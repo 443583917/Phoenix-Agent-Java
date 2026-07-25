@@ -7,6 +7,8 @@ import ReportMessage from './report/ReportMessage.vue';
 import type { ResultData } from '#/api/core/resultSet';
 import ResultSetDisplay from '#/components/run/ResultSetDisplay.vue';
 import { confirmFrontHarnessChat } from '#/api/front/chat';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 const chat = useChatStore();
 const agentStore = useAgentStore();
@@ -29,6 +31,13 @@ function renderMessage(msg: Record<string, any>): string {
   }
   return content;
   // return content.replaceAll('\n', '<br>');
+}
+
+function markdownToHtml(markdown: string): string {
+  if (!markdown) return '';
+  marked.setOptions({ gfm: true, breaks: true });
+  const rawHtml = marked.parse(markdown) as string;
+  return DOMPurify.sanitize(rawHtml);
 }
 
 function escapeHtml(text: string): string {
@@ -87,6 +96,22 @@ async function handleConfirmAction(
   let streamMsgId: string | null = null;
   let fullText = '';
 
+  if (allowed) {
+    streamMsgId = uid();
+    const msgs = chat.messagesByS[confirmSessionId] ?? [];
+    msgs.push({
+      id: streamMsgId,
+      role: 'assistant',
+      content: '',
+      createdAt: Date.now(),
+      streaming: true,
+    });
+    chat.messagesByS = {
+      ...chat.messagesByS,
+      [confirmSessionId]: [...msgs],
+    };
+  }
+
   try {
     await confirmFrontHarnessChat(
       { sessionId: confirmSessionId, agentSn, allowed },
@@ -110,7 +135,7 @@ async function handleConfirmAction(
 
         const idx = msgs.findIndex((m: any) => m.id === streamMsgId);
         if (idx >= 0) {
-          msgs[idx] = { ...msgs[idx], content: fullText };
+          msgs[idx] = { ...msgs[idx], content: markdownToHtml(fullText) };
           chat.messagesByS = {
             ...chat.messagesByS,
             [confirmSessionId]: [...msgs],
@@ -131,6 +156,17 @@ async function handleConfirmAction(
       },
     );
   } catch (error: any) {
+    if (streamMsgId) {
+      const msgs = chat.messagesByS[confirmSessionId] ?? [];
+      const idx = msgs.findIndex((m: any) => m.id === streamMsgId);
+      if (idx >= 0) {
+        msgs[idx] = { ...msgs[idx], content: `操作失败: ${error.message}`, streaming: false };
+        chat.messagesByS = {
+          ...chat.messagesByS,
+          [confirmSessionId]: [...msgs],
+        };
+      }
+    }
     ElMessage.error(`操作失败: ${error.message}`);
   } finally {
     confirming.value = false;
