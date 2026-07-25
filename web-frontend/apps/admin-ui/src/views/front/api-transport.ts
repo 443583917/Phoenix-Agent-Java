@@ -334,7 +334,7 @@ export const apiChatTransport: ChatTransport = {
               onNodeMessage?.({
                 id: uid(),
                 role: 'assistant',
-                content: fullText || '',
+                content: markdownToHtml(fullText || ''),
                 createdAt: Date.now(),
                 messageType: 'harness-confirm',
                 metadata: {
