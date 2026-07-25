@@ -248,6 +248,22 @@ export const realChatTransport: ChatTransport = {
           (response) => {
             if (abortRequested) return;
             if (response.error) return;
+            if (response.needConfirm && response.buttons) {
+              onNodeMessage?.({
+                id: uid(),
+                role: 'assistant',
+                content: renderMarkdown(fullText || ''),
+                createdAt: Date.now(),
+                messageType: 'harness-confirm',
+                metadata: {
+                  needConfirm: true,
+                  buttons: response.buttons,
+                  agentSn: currentAgent?.sn || '',
+                  sessionId,
+                },
+              });
+              return;
+            }
             if (response.text) {
               fullText += response.text;
               onProgress?.(renderMarkdown(fullText));

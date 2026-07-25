@@ -7,7 +7,9 @@ import {
   useChatSession,
   useChatStore,
 } from '@phoenix/chat-shared';
-import { getAgentSessionsApi } from '../../services/chat';
+import { getAgentSessionsApi, saveMessageApi } from '../../services/chat';
+import { confirmFrontHarnessChat } from '../../services/stream';
+import { renderMarkdown } from '../../utils/markdown';
 import { showFailToast, showLoadingToast, showSuccessToast } from 'vant';
 
 import { useActionMenu } from '../../components/useActionMenu';
@@ -29,8 +31,133 @@ const scrollRef = ref<HTMLElement | null>(null);
 const drawerOpen = ref(false);
 const pickerOpen = ref(false);
 const avatarError = ref(false);
+const confirming = ref(false);
 const bubbleMenu = useActionMenu();
 const longPressIndex = ref<number>(-1);
+
+const hasPendingConfirm = computed(() =>
+  activeMessages.value.some((m: any) => m.messageType === 'harness-confirm'),
+);
+
+let msgCounter = 0;
+function uid(): string {
+  msgCounter++;
+  return `m-${Date.now().toString(36)}-${msgCounter}`;
+}
+
+async function handleConfirmAction(
+  msg: any,
+  btn: { text: string; action: string; type?: string },
+) {
+  if (confirming.value) return;
+  confirming.value = true;
+  const metadata = msg.metadata || {};
+  const { sessionId: confirmSessionId, agentSn } = metadata;
+  if (!confirmSessionId || !agentSn) {
+    confirming.value = false;
+    return;
+  }
+
+  const allowed = btn.action === 'confirm';
+  let streamMsgId: string | null = null;
+  let fullText = '';
+
+  chat.$patch((state) => {
+    const sessionMsgs = (state.messagesByS[confirmSessionId] ?? []).filter(
+      (m: any) => m.id !== msg.id && !m.streaming,
+    );
+    state.messagesByS[confirmSessionId] = sessionMsgs;
+  });
+
+  if (allowed) {
+    streamMsgId = uid();
+    chat.$patch((state) => {
+      const sessionMsgs = state.messagesByS[confirmSessionId] ?? [];
+      sessionMsgs.push({
+        id: streamMsgId,
+        role: 'assistant',
+        content: '',
+        createdAt: Date.now(),
+        streaming: true,
+      });
+    });
+  }
+
+  try {
+    await confirmFrontHarnessChat(
+      { sessionId: confirmSessionId, agentSn, allowed },
+      (response) => {
+        try {
+          if (response.error) return;
+          if (!response.text) return;
+
+          fullText += response.text.trim();
+
+          if (!streamMsgId) {
+            streamMsgId = uid();
+            chat.$patch((state) => {
+              const sessionMsgs = state.messagesByS[confirmSessionId] ?? [];
+              sessionMsgs.push({
+                id: streamMsgId!,
+                role: 'assistant',
+                content: '',
+                createdAt: Date.now(),
+                streaming: true,
+              });
+            });
+          }
+
+          chat.$patch((state) => {
+            const sessionMsgs = state.messagesByS[confirmSessionId] ?? [];
+            const idx = sessionMsgs.findIndex((m: any) => m.id === streamMsgId);
+            if (idx >= 0) {
+              sessionMsgs[idx] = {
+                ...sessionMsgs[idx],
+                content: renderMarkdown(fullText),
+              };
+            }
+          });
+        } catch {
+          // skip callback errors
+        }
+      },
+      () => {
+        try {
+          if (!streamMsgId) return;
+          const content = fullText ? renderMarkdown(fullText) : '已处理完成';
+          chat.$patch((state) => {
+            const sessionMsgs = state.messagesByS[confirmSessionId] ?? [];
+            const idx = sessionMsgs.findIndex((m: any) => m.id === streamMsgId);
+            if (idx >= 0) {
+              sessionMsgs[idx] = { ...sessionMsgs[idx], content, streaming: false };
+            }
+          });
+          saveMessageApi(confirmSessionId, {
+            sessionId: confirmSessionId,
+            role: 'assistant',
+            content,
+            messageType: 'text',
+          }).catch(() => {});
+        } catch {
+          /* ignore */
+        }
+      },
+    );
+  } catch (error: any) {
+    if (streamMsgId) {
+      chat.$patch((state) => {
+        const sessionMsgs = state.messagesByS[confirmSessionId] ?? [];
+        const idx = sessionMsgs.findIndex((m: any) => m.id === streamMsgId);
+        if (idx >= 0) {
+          sessionMsgs[idx] = { ...sessionMsgs[idx], content: `操作失败: ${error.message}`, streaming: false };
+        }
+      });
+    }
+    showFailToast(`操作失败: ${error.message}`);
+  } finally {
+    confirming.value = false;
+  }
+}
 
 const hasAgent = computed(() => !!currentAgent.value);
 const hasMessages = computed(() => activeMessages.value.length > 0);
@@ -271,16 +398,37 @@ async function handleRegenerate(idx: number) {
           </div>
 
           <div v-else class="chat-page__inner">
-            <ChatBubble
-                v-for="(msg, idx) in activeMessages"
-                :key="msg.id"
+            <template v-for="(msg, idx) in activeMessages" :key="msg.id">
+              <div
+                v-if="msg.messageType === 'harness-confirm'"
+                class="harness-confirm"
+              >
+                <div class="harness-confirm__content" v-html="msg.content" />
+                <div class="harness-confirm__buttons">
+                  <button
+                    v-for="(btn, bidx) in msg.metadata?.buttons || []"
+                    :key="bidx"
+                    :class="[
+                      'harness-confirm__btn',
+                      btn.type === 'danger' ? 'harness-confirm__btn--danger' : 'harness-confirm__btn--primary',
+                    ]"
+                    :disabled="confirming"
+                    @click="handleConfirmAction(msg, btn)"
+                  >
+                    {{ btn.text }}
+                  </button>
+                </div>
+              </div>
+              <ChatBubble
+                v-else
                 :role="msg.role"
                 :content="msg.content"
                 :message-type="msg.messageType ?? 'text'"
                 @longpress="handleLongPress(idx)"
                 @copy="handleCopy(msg.content)"
                 @regenerate="handleRegenerate(idx)"
-            />
+              />
+            </template>
             <ChatBubble
                 v-if="isActiveSessionSending"
                 role="assistant"
@@ -291,7 +439,7 @@ async function handleRegenerate(idx: number) {
       </div>
 
       <div v-if="hasAgent" class="chat-page__composer">
-        <ChatComposer :disabled="isActiveSessionSending" @submit="handleSend" />
+        <ChatComposer :disabled="isActiveSessionSending || hasPendingConfirm" @submit="handleSend" />
       </div>
 
     </div>
@@ -488,5 +636,62 @@ async function handleRegenerate(idx: number) {
 .slide-with-drawer {
   /* 位移距离应与抽屉宽度一致，此处为 80% */
   transform: translateX(70%);
+}
+
+.harness-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--m-bg-elevated);
+  border-radius: 10px;
+}
+
+.harness-confirm__content {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--m-text-primary);
+  white-space: normal;
+  overflow-x: auto;
+}
+
+.harness-confirm__buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.harness-confirm__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 38px;
+  padding: 0 16px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  transition: opacity 0.15s ease;
+}
+
+.harness-confirm__btn:active {
+  opacity: 0.8;
+}
+
+.harness-confirm__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.harness-confirm__btn--primary {
+  color: #fff;
+  background: var(--m-brand-primary);
+}
+
+.harness-confirm__btn--danger {
+  color: #fff;
+  background: #ee0a24;
 }
 </style>
