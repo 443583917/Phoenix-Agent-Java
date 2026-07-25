@@ -622,7 +622,7 @@ async function handleConfirmAction(
   flex-direction: column;
   gap: 10px;
   padding: 10px 14px;
-  background: hsl(var(--card));
+  background: hsl(var(--warning)/0.5);
   border-radius: 10px;
 }
 
