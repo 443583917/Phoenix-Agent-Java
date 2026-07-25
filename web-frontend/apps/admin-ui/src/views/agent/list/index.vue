@@ -210,7 +210,7 @@ onMounted(loadAgents);
 <template>
   <Page>
     <!-- 内容头部 -->
-    <div class="mb-4 flex items-center justify-between px-1">
+<!--    <div class="mb-4 flex items-center justify-between px-1">
       <div>
         <h1 class="text-lg font-semibold">智能体管理中心</h1>
         <p class="text-sm text-muted-foreground">创建和管理您的AI智能体，让数据分析更智能</p>
@@ -233,7 +233,7 @@ onMounted(loadAgents);
             <div class="mt-0.5 text-xs text-muted-foreground">已下线</div>
           </div>
         </div>
-    </div>
+    </div>-->
 
     <!-- 过滤和搜索区域 -->
     <ElCard class="mb-4">
@@ -243,28 +243,28 @@ onMounted(loadAgents);
             <div class="flex items-center">
               <ElIcon><IconifyIcon icon="lucide:grid-3x3" /></ElIcon>
               <span>全部智能体</span>
-              <span class="tab-count">{{ agents.length }}</span>
+              <span class="tab-count tab-count-all">{{ agents.length }}</span>
             </div>
           </ElRadioButton>
           <ElRadioButton value="published">
             <div class="flex items-center">
               <ElIcon><IconifyIcon icon="lucide:check" /></ElIcon>
               <span>已发布</span>
-              <span class="tab-count">{{ publishedCount }}</span>
+              <span class="tab-count tab-count-published">{{ publishedCount }}</span>
             </div>
           </ElRadioButton>
           <ElRadioButton value="draft">
             <div class="flex items-center">
               <ElIcon><IconifyIcon icon="lucide:pencil" /></ElIcon>
               <span>草稿</span>
-              <span class="tab-count">{{ draftCount }}</span>
+              <span class="tab-count tab-count-draft">{{ draftCount }}</span>
             </div>
           </ElRadioButton>
           <ElRadioButton value="offline">
             <div class="flex items-center">
               <ElIcon><IconifyIcon icon="lucide:square" /></ElIcon>
               <span>已下线</span>
-              <span class="tab-count">{{ offlineCount }}</span>
+              <span class="tab-count tab-count-offline">{{ offlineCount }}</span>
             </div>
           </ElRadioButton>
         </ElRadioGroup>
@@ -403,9 +403,27 @@ onMounted(loadAgents);
   margin-left: 0.3rem;
   font-size: 0.7rem;
   font-weight: 600;
+  border-radius: 4px;
+}
+
+.tab-count-all {
+  color: #3b82f6;
+  background: #eff6ff;
+}
+
+.tab-count-published {
+  color: #22c55e;
+  background: #f0fdf4;
+}
+
+.tab-count-draft {
+  color: #f59e0b;
+  background: #fffbeb;
+}
+
+.tab-count-offline {
   color: #6b7280;
   background: #f3f4f6;
-  border-radius: 4px;
 }
 
 .agents-grid {
