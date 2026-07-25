@@ -7,6 +7,7 @@ import ReportMessage from './report/ReportMessage.vue';
 import type { ResultData } from '#/api/core/resultSet';
 import ResultSetDisplay from '#/components/run/ResultSetDisplay.vue';
 import { confirmFrontHarnessChat } from '#/api/front/chat';
+import { saveMessageApi } from '#/api';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -142,16 +143,27 @@ async function handleConfirmAction(
           };
         }
       },
-      () => {
+      async () => {
         if (!streamMsgId) return;
         const msgs = chat.messagesByS[confirmSessionId] ?? [];
         const idx = msgs.findIndex((m: any) => m.id === streamMsgId);
         if (idx >= 0) {
-          msgs[idx] = { ...msgs[idx], streaming: false };
+          const content = markdownToHtml(fullText);
+          msgs[idx] = { ...msgs[idx], content, streaming: false };
           chat.messagesByS = {
             ...chat.messagesByS,
             [confirmSessionId]: [...msgs],
           };
+          try {
+            await saveMessageApi(confirmSessionId, {
+              sessionId: confirmSessionId,
+              role: 'assistant',
+              content,
+              messageType: 'text',
+            } as any);
+          } catch {
+            /* ignore */
+          }
         }
       },
     );
