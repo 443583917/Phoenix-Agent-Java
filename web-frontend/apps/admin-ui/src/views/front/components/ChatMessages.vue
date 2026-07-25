@@ -85,13 +85,12 @@ async function handleConfirmAction(
     return;
   }
 
-  // 隐藏确认/取消按钮
-  const allMsgs = chat.messagesByS[confirmSessionId] ?? [];
-  const msgIdx = allMsgs.findIndex((m: any) => m.id === msg.id);
-  if (msgIdx >= 0) {
-    allMsgs[msgIdx] = { ...allMsgs[msgIdx], messageType: 'text' };
-    chat.messagesByS = { ...chat.messagesByS, [confirmSessionId]: [...allMsgs] };
-  }
+  // 移除确认/取消按钮消息和原 transport.send 的流式占位消息
+  // confirm API 返回的内容会包含确认前的上下文文本，因此无需保留原消息
+  let allMsgs = (chat.messagesByS[confirmSessionId] ?? []).filter(
+    (m: any) => m.id !== msg.id && !m.streaming,
+  );
+  chat.messagesByS = { ...chat.messagesByS, [confirmSessionId]: [...allMsgs] };
 
   const allowed = btn.action === 'confirm';
   let streamMsgId: string | null = null;
