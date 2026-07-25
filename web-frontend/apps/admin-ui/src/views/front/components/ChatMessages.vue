@@ -231,11 +231,11 @@ async function handleConfirmAction(
             v-else-if="(msg as any).messageType === 'harness-confirm'"
             class="chat-message__confirm"
           >
-            <div
+<!--            <div
               v-if="msg.content"
               class="chat-message__confirm-text"
               v-html="renderMessage(msg)"
-            ></div>
+            ></div>-->
             <div class="chat-message__confirm-buttons">
               <button
                 v-for="(btn, bidx) in (msg as any).metadata?.buttons || []"
