@@ -40,11 +40,42 @@ import {
 } from '#/api';
 
 import { VbenTableAction } from '#/adapter/vxe-table';
+import { useVbenForm } from '#/adapter/form';
 import { useColumns } from './data';
 
 defineOptions({ name: 'ModelConfig' });
 
 const columns = useColumns();
+
+const [FilterForm] = useVbenForm({
+  commonConfig: { componentProps: { clearable: true } },
+  layout: 'inline',
+  wrapperClass: 'grid-cols-1',
+  submitButtonOptions: { content: '查询' },
+  schema: [
+    {
+      fieldName: 'modelType',
+      component: 'Select',
+      label: '模型类型',
+      labelWidth: 60,
+      componentProps: {
+        placeholder: '请选择模型类型',
+        style: { width: '240px' },
+        options: [
+          { label: '全部', value: '' },
+          { label: '对话模型 (CHAT)', value: 'CHAT' },
+          { label: '嵌入模型 (EMBEDDING)', value: 'EMBEDDING' },
+        ],
+      },
+    },
+  ],
+  handleSubmit: (values) => {
+    activeFilter.value = values.modelType || '';
+  },
+  handleReset: () => {
+    activeFilter.value = '';
+  },
+});
 
 const loading = ref(true);
 const dialogVisible = ref(false);
@@ -325,30 +356,16 @@ onMounted(loadConfigs);
 </script>
 
 <template>
-  <Page
-    title="模型配置管理"
-    description="配置和管理AI模型参数，支持多种模型提供商"
-  >
-    <ElCard class="mb-4">
-      <div class="flex items-center justify-between">
-        <div class="flex gap-3">
-          <ElButton type="primary" @click="showAddDialog"> 新增 </ElButton>
-          <ElButton @click="loadConfigs">刷新</ElButton>
-        </div>
-        <ElSelect
-          v-model="activeFilter"
-          placeholder="筛选模型类型"
-          clearable
-          style="width: 300px"
-        >
-          <ElOption label="全部" value="" />
-          <ElOption label="对话模型 (CHAT)" value="CHAT" />
-          <ElOption label="嵌入模型 (EMBEDDING)" value="EMBEDDING" />
-        </ElSelect>
-      </div>
+  <Page auto-content-height>
+    <ElCard class="search-section" :body-style="{ padding: '12px 20px' }">
+      <FilterForm />
     </ElCard>
 
-    <ElCard v-if="!loading">
+    <ElCard v-if="!loading" :body-style="{ padding: '20px' }">
+      <div class="table-toolbar">
+        <ElButton type="primary" @click="showAddDialog">新增</ElButton>
+        <ElButton @click="loadConfigs">刷新</ElButton>
+      </div>
       <ElTable :data="filteredConfigs" style="width: 100%" stripe>
         <template v-for="col in columns" :key="col.label">
           <ElTableColumn v-if="!col.slot" v-bind="col" />
@@ -400,7 +417,7 @@ onMounted(loadConfigs);
             </template>
           </ElTableColumn>
         </template>
-        <ElTableColumn label="操作" width="240" fixed="right">
+        <ElTableColumn label="操作" width="240">
           <template #default="{ row }">
             <VbenTableAction :actions="getActions(rowAs(row))" />
           </template>
@@ -589,3 +606,21 @@ onMounted(loadConfigs);
     </ElDialog>
   </Page>
 </template>
+
+<style scoped>
+.search-section {
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.search-section :deep(.vben-form) {
+  align-items: center;
+}
+
+.table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+</style>

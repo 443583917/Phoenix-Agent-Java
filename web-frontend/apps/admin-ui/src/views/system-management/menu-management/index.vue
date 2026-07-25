@@ -219,7 +219,6 @@ const [FilterForm] = useVbenForm({
   commonConfig: { componentProps: { clearable: true } },
   layout: 'inline',
   wrapperClass: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
-  actionButtonsReverse: true,
   submitButtonOptions: { content: '查询' },
   schema: [
     {
@@ -382,9 +381,11 @@ onMounted(() => {
 <template>
   <Page auto-content-height>
     <div class="page-container">
-      <ElCard class="table-section" :body-style="{ padding: '20px' }">
+      <ElCard class="search-section" :body-style="{ padding: '12px 20px' }">
         <FilterForm />
+      </ElCard>
 
+      <ElCard class="table-section" :body-style="{ padding: '20px' }">
         <div class="table-toolbar">
           <ElButton type="primary" @click="showAddDialog">
             <ElIcon><IconifyIcon icon="lucide:plus" /></ElIcon>
@@ -679,12 +680,22 @@ onMounted(() => {
   @apply bg-background-deep;
 }
 
+.search-section {
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.search-section :deep(.vben-form) {
+  align-items: center;
+}
+
 .table-section {
   border-radius: 12px;
 }
 
 .table-toolbar {
   display: flex;
+  justify-content: flex-end;
   gap: 0.75rem;
   margin-bottom: 1rem;
 }

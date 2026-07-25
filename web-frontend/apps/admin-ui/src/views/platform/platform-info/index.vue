@@ -39,7 +39,6 @@ const [FilterForm] = useVbenForm({
   commonConfig: { componentProps: { clearable: true } },
   layout: 'inline',
   wrapperClass: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
-  actionButtonsReverse: true,
   submitButtonOptions: { content: '查询' },
   schema: searchFormSchema,
   handleSubmit: (values) => {
@@ -139,8 +138,11 @@ onMounted(() => {
 <template>
   <Page auto-content-height>
     <div class="page-container">
-      <ElCard class="table-section" :body-style="{ padding: '20px', height: '100%', display: 'flex', flexDirection: 'column' }">
+      <ElCard class="search-section" :body-style="{ padding: '12px 20px' }">
         <FilterForm />
+      </ElCard>
+
+      <ElCard class="table-section" :body-style="{ padding: '20px' }">
         <div class="table-toolbar">
           <ElButton type="primary" @click="onCreate">
             <ElIcon><IconifyIcon icon="lucide:plus" /></ElIcon>
@@ -152,58 +154,55 @@ onMounted(() => {
           </ElButton>
         </div>
 
-        <div class="table-wrapper">
-          <ElTable
-              :data="tableData"
-              stripe
-              height="100%"
-              v-loading="loading"
-              empty-text="暂无数据"
-          >
-            <template v-for="col in columns" :key="col.label">
-              <ElTableColumn v-if="!col.slot" v-bind="col" />
-              <ElTableColumn v-else v-bind="col">
-                <template #default="scope">
-                  <template v-if="col.slot === 'type'">
-                    <ElTag type="primary" size="small">
-                      {{ typeLabels[scope.row.type] || scope.row.type }}
-                    </ElTag>
-                  </template>
-                  <template v-else-if="col.slot === 'status'">
-                    <ElTag
-                        :type="scope.row.status === '1' ? 'success' : 'danger'"
-                        size="small"
-                    >
-                      {{ scope.row.status === '1' ? '启用' : '禁用' }}
-                    </ElTag>
-                  </template>
-                  <template v-else-if="col.slot === 'secret'">
-                    <span class="secret-text">{{ scope.row.corpsecret?.slice(0, 8) }}******</span>
-                  </template>
-                  <template v-else-if="col.slot === 'time'">
-                    {{ scope.row.createTime?.replace('T', ' ')?.slice(0, 16) }}
-                  </template>
+        <ElTable
+          :data="tableData"
+          stripe
+          v-loading="loading"
+          empty-text="暂无数据"
+        >
+          <template v-for="col in columns" :key="col.label">
+            <ElTableColumn v-if="!col.slot" v-bind="col" />
+            <ElTableColumn v-else v-bind="col">
+              <template #default="scope">
+                <template v-if="col.slot === 'type'">
+                  <ElTag type="primary" size="small">
+                    {{ typeLabels[scope.row.type] || scope.row.type }}
+                  </ElTag>
                 </template>
-              </ElTableColumn>
-            </template>
-            <ElTableColumn label="操作" width="200">
-              <template #default="{ row }">
-                <VbenTableAction :actions="getActions(row as PlatformInfo)" />
+                <template v-else-if="col.slot === 'status'">
+                  <ElTag
+                    :type="scope.row.status === '1' ? 'success' : 'danger'"
+                    size="small"
+                  >
+                    {{ scope.row.status === '1' ? '启用' : '禁用' }}
+                  </ElTag>
+                </template>
+                <template v-else-if="col.slot === 'secret'">
+                  <span class="secret-text">{{ scope.row.corpsecret?.slice(0, 8) }}******</span>
+                </template>
+                <template v-else-if="col.slot === 'time'">
+                  {{ scope.row.createTime?.replace('T', ' ')?.slice(0, 16) }}
+                </template>
               </template>
             </ElTableColumn>
-          </ElTable>
-        </div>
+          </template>
+          <ElTableColumn label="操作" width="200">
+            <template #default="{ row }">
+              <VbenTableAction :actions="getActions(row as PlatformInfo)" />
+            </template>
+          </ElTableColumn>
+        </ElTable>
 
         <div class="pagination-wrapper">
           <ElPagination
-              v-model:current-page="page"
-              v-model:page-size="pageSize"
-              :total="total"
-              :page-sizes="[10, 20, 50, 100]"
-              layout="total, sizes, prev, pager, next, jumper"
-              background
-              @current-change="handlePageChange"
-              @size-change="handleSizeChange"
+            v-model:current-page="page"
+            v-model:page-size="pageSize"
+            :total="total"
+            :page-sizes="[10, 20, 50, 100]"
+            layout="total, sizes, prev, pager, next, jumper"
+            background
+            @current-change="handlePageChange"
+            @size-change="handleSizeChange"
           />
         </div>
       </ElCard>
@@ -215,35 +214,32 @@ onMounted(() => {
 <style scoped>
 .page-container {
   @apply bg-background-deep;
+}
 
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.search-section {
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.search-section :deep(.vben-form) {
+  align-items: center;
 }
 
 .table-section {
   border-radius: 12px;
-  flex: 1;
-  min-height: 0;
 }
 
 .table-toolbar {
   display: flex;
+  justify-content: flex-end;
   gap: 0.75rem;
   margin-bottom: 1rem;
-  flex-shrink: 0;
-}
-
-.table-wrapper {
-  flex: 1;
-  min-height: 0;
 }
 
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
   margin-top: 1rem;
-  flex-shrink: 0;
 }
 
 .secret-text {
