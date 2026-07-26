@@ -28,8 +28,8 @@ const [FilterForm] = useVbenForm({
   commonConfig: { componentProps: { clearable: true } },
   layout: 'inline',
   wrapperClass: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
-  actionButtonsReverse: true,
   submitButtonOptions: { content: '查询' },
+  resetButtonOptions: { plain: true },
   schema: [
     {
       fieldName: 'operationUsername',

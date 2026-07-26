@@ -35,6 +35,8 @@ const formOptions: VbenFormProps = {
   actionWrapperClass: 'pl-2 !justify-end md:!justify-start',
   actionPosition: 'left',
   actionLayout: 'inline',
+  submitButtonOptions: { content: '查询' },
+  resetButtonOptions: { plain: true },
   schema: useSearchFormSchema(),
 };
 
