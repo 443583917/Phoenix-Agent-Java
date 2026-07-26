@@ -249,11 +249,27 @@ export async function confirmFrontHarnessChat(
     throw new Error('未授权，请先登录');
   }
   if (!httpResponse.ok) {
+    // 非 2xx 且非 401：可能是后端返回了 HTML 错误页
+    const contentType = httpResponse.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream')) {
+      // 尝试读取错误响应体，获取更有意义的错误信息
+      try {
+        const errorText = await httpResponse.text();
+        if (errorText) {
+          throw new Error(`Confirm failed (${httpResponse.status}): ${errorText.slice(0, 200)}`);
+        }
+      } catch {
+        // ignore
+      }
+      throw new Error(`Confirm failed: HTTP ${httpResponse.status}, got ${contentType || 'unknown'} instead of SSE`);
+    }
     throw new Error(`Confirm request failed! status: ${httpResponse.status}`);
   }
   const reader = httpResponse.body?.getReader();
   const decoder = new TextDecoder();
-  if (!reader) return;
+  if (!reader) {
+    throw new Error('Response body is empty');
+  }
   let buffer = '';
   let currentData = '';
   const dispatchEvent = () => {
@@ -280,26 +296,35 @@ export async function confirmFrontHarnessChat(
     }
     currentData = '';
   };
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split('\n');
-    buffer = parts.pop() || '';
-    for (const line of parts) {
-      if (line === '') {
-        dispatchEvent();
-      } else if (line.startsWith('data:')) {
-        currentData = line.slice(5).trim();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) {
+        throw new Error('Received empty chunk from SSE stream');
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n');
+      buffer = parts.pop() || '';
+      for (const line of parts) {
+        if (line === '') {
+          dispatchEvent();
+        } else if (line.startsWith('data:')) {
+          currentData = line.slice(5).trim();
+        }
       }
     }
-  }
-  if (buffer.trim()) {
-    const line = buffer.trim();
-    if (line.startsWith('data:')) {
-      currentData = line.slice(5).trim();
-      dispatchEvent();
+    if (buffer.trim()) {
+      const line = buffer.trim();
+      if (line.startsWith('data:')) {
+        currentData = line.slice(5).trim();
+        dispatchEvent();
+      }
     }
+  } catch (error: any) {
+    // SSE 流读取过程中的异常，包装为更友好的错误信息
+    if (error.name === 'AbortError') return;
+    throw new Error(`SSE stream error: ${error.message}`);
   }
 }
 

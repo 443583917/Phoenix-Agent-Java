@@ -9,7 +9,6 @@ import {
 } from '@phoenix/chat-shared';
 import { getAgentSessionsApi, saveMessageApi } from '../../services/chat';
 import { confirmFrontHarnessChat } from '../../services/stream';
-import { renderMarkdown } from '../../utils/markdown';
 import { showFailToast, showLoadingToast, showSuccessToast } from 'vant';
 
 import { useActionMenu } from '../../components/useActionMenu';
@@ -113,7 +112,7 @@ async function handleConfirmAction(
             if (idx >= 0) {
               sessionMsgs[idx] = {
                 ...sessionMsgs[idx],
-                content: renderMarkdown(fullText),
+                content: fullText,
               };
             }
           });
@@ -124,7 +123,7 @@ async function handleConfirmAction(
       () => {
         try {
           if (!streamMsgId) return;
-          const content = fullText ? renderMarkdown(fullText) : '已处理完成';
+          const content = fullText || '已处理完成';
           chat.$patch((state) => {
             const sessionMsgs = state.messagesByS[confirmSessionId] ?? [];
             const idx = sessionMsgs.findIndex((m: any) => m.id === streamMsgId);
@@ -148,6 +147,7 @@ async function handleConfirmAction(
       chat.$patch((state) => {
         const sessionMsgs = state.messagesByS[confirmSessionId] ?? [];
         const idx = sessionMsgs.findIndex((m: any) => m.id === streamMsgId);
+        debugger;
         if (idx >= 0) {
           sessionMsgs[idx] = { ...sessionMsgs[idx], content: `操作失败: ${error.message}`, streaming: false };
         }
@@ -424,6 +424,7 @@ async function handleRegenerate(idx: number) {
                 :role="msg.role"
                 :content="msg.content"
                 :message-type="msg.messageType ?? 'text'"
+                :typing="msg.streaming"
                 @longpress="handleLongPress(idx)"
                 @copy="handleCopy(msg.content)"
                 @regenerate="handleRegenerate(idx)"
