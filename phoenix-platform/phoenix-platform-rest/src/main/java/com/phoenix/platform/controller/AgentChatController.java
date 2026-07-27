@@ -5,12 +5,16 @@ import cn.hutool.core.collection.CollUtil;
 import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
 import com.phoenix.agent.AgentManager;
 import com.phoenix.agent.dto.ChatModelRequest;
+import com.phoenix.agent.harness.request.HarnessRequest;
+import com.phoenix.agent.harness.send.HarnessChatService;
 import com.phoenix.agent.vo.AgentInfoDto;
 import com.phoenix.common.vo.login.UserProfile;
 import com.phoenix.data.dto.GraphRequest;
 import com.phoenix.data.service.graph.GraphService;
 import com.phoenix.data.vo.GraphNodeResponse;
 import com.phoenix.common.vo.front.LoginVO;
+import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.event.RequireUserConfirmEvent;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -41,6 +45,7 @@ import static com.phoenix.platform.constant.PlatformConstant.ACCOUNT_LOGIN;
 public class AgentChatController {
     private final AgentManager agentManager;
     private final GraphService graphService;
+    private final HarnessChatService harnessChatService;
 
     @PostMapping(value = "/stream/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<Map<String, Object>> chatModel(@RequestBody ChatModelRequest request) {
@@ -138,6 +143,4 @@ public class AgentChatController {
                 })
                 .doOnComplete(() -> log.info("Stream completed successfully, threadId: {}", request.getThreadId()));
     }
-
-
 }

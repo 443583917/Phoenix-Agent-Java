@@ -11,7 +11,6 @@ import {
   deleteSessionApi,
   renameSessionApi,
   saveMessageApi,
-  streamSearch,
   TextType,
 } from '#/api';
 import type { GraphNodeResponse, ResultSetData } from '#/api';
@@ -19,6 +18,8 @@ import {
   getSessionMessagesApi,
   streamFrontChat,
   streamFrontChatSql,
+  streamFrontHarnessChat,
+  confirmFrontHarnessChat,
 } from '#/api/front/chat';
 
 import hljs from 'highlight.js';
@@ -213,6 +214,20 @@ export const apiChatTransport: ChatTransport = {
   async listMessages(sessionId: string): Promise<ChatMessage[]> {
     const list = await getSessionMessagesApi(sessionId);
     const messages = list.map((m) => toStoreMessage(m));
+    // Convert markdown content for assistant text messages
+    for (const msg of messages) {
+      if (msg.role === 'assistant' && !msg.messageType) {
+        msg.messageType = 'text';
+      }
+      if (
+        msg.role === 'assistant' &&
+        msg.messageType === 'text' &&
+        !/<[a-z][\s\S]*>/i.test(msg.content)
+      ) {
+        msg.content = markdownToHtml(msg.content);
+        msg.messageType = 'html';
+      }
+    }
     // Restore threadId from last assistant message's metadata
     const lastAssistant = [...messages]
       .reverse()
@@ -261,8 +276,13 @@ export const apiChatTransport: ChatTransport = {
     onProgress?: (text: string) => void,
     onNodeMessage?: (message: ChatMessage) => void,
   ): Promise<ChatMessage> {
-    const { sessionId, content, agentId } = payload;
+    let { sessionId, content, agentId } = payload;
 
+    if (!agentId) {
+      const chatStore = useChatStore();
+      const session = chatStore.sessions.find((s) => s.id === sessionId);
+      agentId = session?.agentId || useAgentStore().activeAgentId;
+    }
     if (!agentId) {
       throw new Error('agentId is required for sending messages');
     }
@@ -289,9 +309,98 @@ export const apiChatTransport: ChatTransport = {
     const agentStore = useAgentStore();
     const currentAgent = agentStore.agents.find((a) => a.id === agentId);
     const isSql = currentAgent?.type === 'sql';
+    const isHarness = currentAgent?.type === 'harness';
 
     const reply = await new Promise<ChatMessage>((resolve, reject) => {
-      if (isSql) {
+      if (isHarness) {
+        let fullText = '';
+        let abortRequested = false;
+
+        const onAbort = () => {
+          abortRequested = true;
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+
+        const closeStream = streamFrontHarnessChat(
+          {
+            sessionId,
+            message: content,
+            harnessSn: currentAgent?.sn || '',
+          },
+          async (response) => {
+            if (abortRequested) return;
+            if (response.error) return;
+            if (response.needConfirm && response.buttons) {
+              onNodeMessage?.({
+                id: uid(),
+                role: 'assistant',
+                content: markdownToHtml(fullText || ''),
+                createdAt: Date.now(),
+                messageType: 'harness-confirm',
+                metadata: {
+                  needConfirm: true,
+                  buttons: response.buttons,
+                  toolCalls: response.toolCalls,
+                  agentSn: currentAgent?.sn || '',
+                  sessionId,
+                },
+              });
+              return;
+            }
+            if (response.text) {
+              fullText += response.text;
+              onProgress?.(markdownToHtml(fullText));
+            }
+          },
+          async (error) => {
+            signal?.removeEventListener('abort', onAbort);
+            if (abortRequested) return;
+            reject(error);
+          },
+          async () => {
+            signal?.removeEventListener('abort', onAbort);
+            if (abortRequested) return;
+
+            const text = fullText || '已处理完成';
+            const html = markdownToHtml(text);
+            const assistantMessage: any = {
+              sessionId,
+              role: 'assistant',
+              content: html,
+              messageType: 'text',
+            };
+            try {
+              await saveMessageApi(sessionId, assistantMessage);
+            } catch {
+              /* ignore */
+            }
+
+            resolve({
+              id: uid(),
+              role: 'assistant',
+              content: html,
+              createdAt: Date.now(),
+              messageType: 'text',
+            });
+          },
+        );
+
+        if (signal?.aborted) {
+          abortRequested = true;
+          closeStream();
+          signal?.removeEventListener('abort', onAbort);
+          reject(new DOMException('Aborted', 'AbortError'));
+          return;
+        }
+
+        const abortHandler = () => {
+          abortRequested = true;
+          closeStream();
+          signal?.removeEventListener('abort', abortHandler);
+          reject(new DOMException('Aborted', 'AbortError'));
+        };
+        signal?.addEventListener('abort', abortHandler, { once: true });
+      } else if (isSql) {
         // --- SQL intelligent agent: use streamFrontChatSql with full node processing ---
         let currentNodeName: string | null = null;
         let currentBlockIndex = -1;
@@ -608,3 +717,81 @@ export const apiChatTransport: ChatTransport = {
     return reply;
   },
 };
+
+export async function handleHarnessConfirm(
+  sessionId: string,
+  agentSn: string,
+  allowed: boolean,
+  onNodeMessage?: (message: ChatMessage) => void,
+  onProgress?: (text: string) => void,
+): Promise<string> {
+  let currentNodeName: string | null = null;
+  let currentBlockIndex = -1;
+  const nodeBlocks: GraphNodeResponse[][] = [];
+  let markdownContent = '';
+
+  await confirmFrontHarnessChat(
+    { sessionId, agentSn, allowed },
+    async (response) => {
+      if (response.error) return;
+
+      const isNewNode =
+        currentNodeName === null || response.nodeName !== currentNodeName;
+
+      if (isNewNode) {
+        if (currentBlockIndex >= 0 && nodeBlocks[currentBlockIndex]) {
+          const nodeHtml = generateNodeHtml(nodeBlocks[currentBlockIndex]!);
+          const storeMsg: ChatMessage = {
+            id: uid(),
+            role: 'assistant',
+            content: nodeHtml,
+            createdAt: Date.now(),
+            messageType: 'html',
+          };
+          onNodeMessage?.(storeMsg);
+        }
+        nodeBlocks.push([{ ...response, text: response.text }]);
+        currentBlockIndex = nodeBlocks.length - 1;
+        currentNodeName = response.nodeName;
+      } else {
+        if (currentBlockIndex >= 0 && nodeBlocks[currentBlockIndex]) {
+          nodeBlocks[currentBlockIndex]?.push({
+            ...response,
+            text: response.text,
+          });
+        } else {
+          nodeBlocks.push([{ ...response, text: response.text }]);
+          currentBlockIndex = nodeBlocks.length - 1;
+          currentNodeName = response.nodeName;
+        }
+      }
+
+      markdownContent = '';
+      for (const block of nodeBlocks) {
+        for (const nd of block) {
+          if (nd.textType === TextType.MARK_DOWN) {
+            markdownContent += nd.text || '';
+          }
+        }
+      }
+      if (markdownContent) {
+        onProgress?.(markdownToHtml(markdownContent));
+      }
+    },
+    async () => {
+      if (currentBlockIndex >= 0 && nodeBlocks[currentBlockIndex]) {
+        const nodeHtml = generateNodeHtml(nodeBlocks[currentBlockIndex]!);
+        const storeMsg: ChatMessage = {
+          id: uid(),
+          role: 'assistant',
+          content: nodeHtml,
+          createdAt: Date.now(),
+          messageType: 'html',
+        };
+        onNodeMessage?.(storeMsg);
+      }
+    },
+  );
+
+  return markdownContent || generateBlocksHtml(nodeBlocks) || '已处理完成';
+}

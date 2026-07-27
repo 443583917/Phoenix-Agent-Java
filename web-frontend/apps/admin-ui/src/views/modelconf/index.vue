@@ -18,7 +18,6 @@ import {
   ElInput,
   ElInputNumber,
   ElMessage,
-  ElMessageBox,
   ElOption,
   ElRadio,
   ElRadioGroup,
@@ -40,7 +39,43 @@ import {
   updateModelConfigApi,
 } from '#/api';
 
+import { VbenTableAction } from '#/adapter/vxe-table';
+import { useVbenForm } from '#/adapter/form';
+import { useColumns } from './data';
+
 defineOptions({ name: 'ModelConfig' });
+
+const columns = useColumns();
+
+const [FilterForm] = useVbenForm({
+  commonConfig: { componentProps: { clearable: true } },
+  layout: 'inline',
+  wrapperClass: 'grid-cols-1',
+  submitButtonOptions: { content: '查询' },
+  schema: [
+    {
+      fieldName: 'modelType',
+      component: 'Select',
+      label: '模型类型',
+      labelWidth: 60,
+      componentProps: {
+        placeholder: '请选择模型类型',
+        style: { width: '240px' },
+        options: [
+          { label: '全部', value: '' },
+          { label: '对话模型 (CHAT)', value: 'CHAT' },
+          { label: '嵌入模型 (EMBEDDING)', value: 'EMBEDDING' },
+        ],
+      },
+    },
+  ],
+  handleSubmit: (values) => {
+    activeFilter.value = values.modelType || '';
+  },
+  handleReset: () => {
+    activeFilter.value = '';
+  },
+});
 
 const loading = ref(true);
 const dialogVisible = ref(false);
@@ -214,46 +249,62 @@ async function handleSubmit() {
   }
 }
 
+function getActions(config: ModelConfig) {
+  return [
+    {
+      text: '连接测试',
+      icon: 'lucide:cable',
+      loading: testingId.value === config.id,
+      onClick: () => handleTestConnection(config),
+    },
+    {
+      text: '启用',
+      icon: 'lucide:check-circle',
+      ifShow: () => !config.isActive,
+      loading: activatingId.value === config.id,
+      popConfirm: {
+        title:
+          config.modelType === 'EMBEDDING'
+            ? '您正在更换嵌入模型，此操作风险较高！由于不同模型的向量空间不一致，切换后可能导致所有历史向量数据（含数据源、智能体知识、业务知识）将全部失效且无法检索。确定要执行吗？'
+            : `确定要启用【${config.provider} - ${config.modelName}】吗？`,
+        confirm: () => handleActivate(config.id, config.modelType),
+        okText: '确定',
+        cancelText: '取消',
+      },
+    },
+    {
+      text: '编辑',
+      icon: 'lucide:edit',
+      onClick: () => handleEdit(config),
+    },
+    {
+      text: '删除',
+      icon: 'lucide:trash-2',
+      danger: true,
+      popConfirm: {
+        title: `确定要删除【${config.provider} - ${config.modelName}】吗？`,
+        confirm: () => handleDelete(config),
+        okText: '确定',
+        cancelText: '取消',
+      },
+    },
+  ];
+}
+
 async function handleDelete(config: ModelConfig) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除配置 "${config.provider} - ${config.modelName}" 吗？此操作不可恢复。`,
-      '删除确认',
-      {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        confirmButtonType: 'danger',
-      },
-    );
-
     if (config.id) {
       await deleteModelConfigApi(config.id);
       ElMessage.success('配置删除成功');
       await loadConfigs();
     }
   } catch {
-    // cancelled
+    ElMessage.error('删除失败');
   }
 }
 
 async function handleActivate(id?: number, modelType?: string) {
   if (!id) return;
-
-  if (modelType === 'EMBEDDING') {
-    try {
-      await ElMessageBox.confirm(
-        '您正在更换嵌入模型，此操作风险较高！由于不同模型的向量空间不一致，切换后可能导致所有历史向量数据（含数据源、智能体知识、业务知识）将全部失效且无法检索。确定要执行吗？',
-        '切换嵌入模型确认',
-        {
-          confirmButtonText: '确定继续',
-          cancelButtonText: '取消',
-          confirmButtonType: 'danger',
-        },
-      );
-    } catch {
-      return;
-    }
-  }
 
   try {
     activatingId.value = id;
@@ -305,135 +356,70 @@ onMounted(loadConfigs);
 </script>
 
 <template>
-  <Page
-    title="模型配置管理"
-    description="配置和管理AI模型参数，支持多种模型提供商"
-  >
-    <ElCard class="mb-4">
-      <div class="flex items-center justify-between">
-        <div class="flex gap-3">
-          <ElButton type="primary" @click="showAddDialog"> 新增 </ElButton>
-          <ElButton @click="loadConfigs">刷新</ElButton>
-        </div>
-        <ElSelect
-          v-model="activeFilter"
-          placeholder="筛选模型类型"
-          clearable
-          style="width: 300px"
-        >
-          <ElOption label="全部" value="" />
-          <ElOption label="对话模型 (CHAT)" value="CHAT" />
-          <ElOption label="嵌入模型 (EMBEDDING)" value="EMBEDDING" />
-        </ElSelect>
-      </div>
+  <Page auto-content-height>
+    <ElCard class="search-section" :body-style="{ padding: '12px 20px' }">
+      <FilterForm />
     </ElCard>
 
-    <ElCard v-if="!loading">
+    <ElCard v-if="!loading" :body-style="{ padding: '20px' }">
+      <div class="table-toolbar">
+        <ElButton type="primary" @click="showAddDialog">新增</ElButton>
+        <ElButton @click="loadConfigs">刷新</ElButton>
+      </div>
       <ElTable :data="filteredConfigs" style="width: 100%" stripe>
-        <ElTableColumn prop="id" label="ID" width="80" />
-        <ElTableColumn prop="provider" label="提供商" width="120">
-          <template #default="scope">
-            <ElTag :type="getProviderTagType(scope.row.provider)" size="small">
-              {{ scope.row.provider }}
-            </ElTag>
-          </template>
-        </ElTableColumn>
-        <ElTableColumn prop="modelName" label="模型名称" width="180" />
-        <ElTableColumn prop="modelType" label="模型类型" width="120">
-          <template #default="scope">
-            <ElTag
-              :type="scope.row.modelType === 'CHAT' ? 'primary' : 'success'"
-              size="small"
-            >
-              {{ scope.row.modelType === 'CHAT' ? '对话模型' : '嵌入模型' }}
-            </ElTag>
-          </template>
-        </ElTableColumn>
-        <ElTableColumn
-          prop="baseUrl"
-          label="API地址"
-          min-width="200"
-          show-overflow-tooltip
-        />
-        <ElTableColumn label="路径配置" min-width="180" show-overflow-tooltip>
-          <template #default="scope">
-            <div
-              v-if="scope.row.modelType === 'CHAT' && scope.row.completionsPath"
-            >
-              <ElTag type="primary" size="small">
-                对话: {{ scope.row.completionsPath }}
-              </ElTag>
-            </div>
-            <div
-              v-else-if="
-                scope.row.modelType === 'EMBEDDING' && scope.row.embeddingsPath
-              "
-            >
-              <ElTag type="success" size="small">
-                嵌入: {{ scope.row.embeddingsPath }}
-              </ElTag>
-            </div>
-            <div v-else>
-              <span class="text-gray-400 italic">使用默认路径</span>
-            </div>
-          </template>
-        </ElTableColumn>
-        <ElTableColumn prop="temperature" label="温度" width="100">
-          <template #default="scope">
-            {{ scope.row.temperature ?? 0.0 }}
-          </template>
-        </ElTableColumn>
-        <ElTableColumn prop="maxTokens" label="最大Token" width="120">
-          <template #default="scope">
-            {{ scope.row.maxTokens ?? 2000 }}
-          </template>
-        </ElTableColumn>
-        <ElTableColumn prop="isActive" label="状态" width="100">
-          <template #default="scope">
-            <ElTag
-              :type="scope.row.isActive ? 'success' : 'info'"
-              size="small"
-              effect="light"
-            >
-              {{ scope.row.isActive ? '已启用' : '未启用' }}
-            </ElTag>
-          </template>
-        </ElTableColumn>
-        <ElTableColumn label="操作" width="320" fixed="right">
-          <template #default="scope">
-            <div class="flex gap-2">
-              <ElButton
-                type="info"
-                size="small"
-                :loading="testingId === scope.row.id"
-                @click="handleTestConnection(rowAs(scope.row))"
-              >
-                连接测试
-              </ElButton>
-              <ElButton
-                v-if="!scope.row.isActive"
-                type="success"
-                size="small"
-                :loading="activatingId === scope.row.id"
-                @click="handleActivate(scope.row.id, scope.row.modelType)"
-              >
-                启用
-              </ElButton>
-              <ElButton
-                type="primary"
-                size="small"
-                @click="handleEdit(rowAs(scope.row))"
-              >
-                编辑
-              </ElButton>
-              <ElButton
-                type="danger"
-                size="small"
-                @click="handleDelete(rowAs(scope.row))"
-              >
-                删除
-              </ElButton>
-            </div>
+        <template v-for="col in columns" :key="col.label">
+          <ElTableColumn v-if="!col.slot" v-bind="col" />
+          <ElTableColumn v-else v-bind="col">
+            <template #default="scope">
+              <template v-if="col.slot === 'provider'">
+                <ElTag :type="getProviderTagType(scope.row.provider)" size="small">
+                  {{ scope.row.provider }}
+                </ElTag>
+              </template>
+              <template v-else-if="col.slot === 'modelType'">
+                <ElTag
+                  :type="scope.row.modelType === 'CHAT' ? 'primary' : 'success'"
+                  size="small"
+                >
+                  {{ scope.row.modelType === 'CHAT' ? '对话模型' : '嵌入模型' }}
+                </ElTag>
+              </template>
+              <template v-else-if="col.slot === 'path'">
+                <div v-if="scope.row.modelType === 'CHAT' && scope.row.completionsPath">
+                  <ElTag type="primary" size="small">
+                    对话: {{ scope.row.completionsPath }}
+                  </ElTag>
+                </div>
+                <div v-else-if="scope.row.modelType === 'EMBEDDING' && scope.row.embeddingsPath">
+                  <ElTag type="success" size="small">
+                    嵌入: {{ scope.row.embeddingsPath }}
+                  </ElTag>
+                </div>
+                <div v-else>
+                  <span class="text-gray-400 italic">使用默认路径</span>
+                </div>
+              </template>
+              <template v-else-if="col.slot === 'temperature'">
+                {{ scope.row.temperature ?? 0.0 }}
+              </template>
+              <template v-else-if="col.slot === 'maxTokens'">
+                {{ scope.row.maxTokens ?? 2000 }}
+              </template>
+              <template v-else-if="col.slot === 'status'">
+                <ElTag
+                  :type="scope.row.isActive ? 'success' : 'info'"
+                  size="small"
+                  effect="light"
+                >
+                  {{ scope.row.isActive ? '已启用' : '未启用' }}
+                </ElTag>
+              </template>
+            </template>
+          </ElTableColumn>
+        </template>
+        <ElTableColumn label="操作" width="240">
+          <template #default="{ row }">
+            <VbenTableAction :actions="getActions(rowAs(row))" />
           </template>
         </ElTableColumn>
       </ElTable>
@@ -620,3 +606,21 @@ onMounted(loadConfigs);
     </ElDialog>
   </Page>
 </template>
+
+<style scoped>
+.search-section {
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.search-section :deep(.vben-form) {
+  align-items: center;
+}
+
+.table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+</style>

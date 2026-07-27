@@ -1,12 +1,16 @@
 import DOMPurify from 'dompurify';
-import { Marked } from 'marked';
+import { marked } from 'marked';
 
-const marked = new Marked({ gfm: true, breaks: true });
+marked.setOptions({ gfm: true, breaks: true });
 
 export function renderMarkdown(md: string): string {
   if (!md) return '';
-  const raw = marked.parse(md, { async: false }) as string;
-  return DOMPurify.sanitize(raw);
+  try {
+    const raw = marked.parse(md) as string;
+    return DOMPurify.sanitize(raw);
+  } catch {
+    return String(md);
+  }
 }
 
 export function escapeHtml(text: string): string {

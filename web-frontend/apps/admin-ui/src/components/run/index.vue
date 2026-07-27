@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import type { Agent } from '#/api/core/agent';
 import type { ChatMessage, ChatSession } from '#/api/core/chat';
-import type { ChatApiRequest, GraphNodeResponse, GraphRequest } from '#/api/core/graph';
+import type {
+  ChatApiRequest,
+  ConfirmButton,
+  GraphNodeResponse,
+  GraphRequest,
+  HarnessChatRequest,
+} from '#/api/core/graph';
 import type {
   ResultData,
   ResultSetData,
@@ -36,14 +42,17 @@ import {
   FullScreen,
   Loading,
   Promotion,
+  WarningFilled,
 } from '@element-plus/icons-vue';
 
 import {
+  confirmHarnessChat,
   createSessionApi,
   getAgentApi,
   getSessionMessagesApi,
   saveMessageApi,
   streamChat,
+  streamHarnessChat,
   streamSearch,
   TextType,
 } from '#/api';
@@ -174,10 +183,19 @@ const requestOptions = reactive({
 });
 const showReportFullscreen = ref(false);
 const fullscreenReportContent = ref('');
+const fullscreenReportFormat = ref<'markdown' | 'html'>('markdown');
+const messageReportFormat = reactive<Record<string, 'markdown' | 'html'>>({});
+function getMessageFormat(messageId: number | undefined): 'markdown' | 'html' {
+  return (messageId != null && messageReportFormat[messageId]) || 'markdown';
+}
 const inputControlsCollapsed = ref(false);
 const autoScroll = ref(true);
 const chatContainer = ref<HTMLElement | null>(null);
 const showHumanFeedback = ref(false);
+const showHarnessConfirm = ref(false);
+const pendingConfirmButtons = ref<ConfirmButton[]>([]);
+const pendingConfirmSessionId = ref('');
+const pendingConfirmAgentSn = ref('');
 const lastRequest = ref<GraphRequest | null>(null);
 const resultSetDisplayConfig = reactive<ResultSetDisplayConfig>({
   showSqlResults: false,
@@ -328,6 +346,7 @@ async function sendGraphRequest(request: GraphRequest, rejectedPlan: boolean) {
     lastRequest.value = request;
     isStreaming.value = true;
     nodeBlocks.value = [];
+    showHarnessConfirm.value = false;
 
     let currentNodeName: string | null = null;
     let currentBlockIndex = -1;
@@ -374,7 +393,19 @@ async function sendGraphRequest(request: GraphRequest, rejectedPlan: boolean) {
 
     let closeStreamFn: (() => void) | null = null;
 
-    if (agent.value.type === 'agent') {
+    switch (agent.value.type) {
+      case 'agent':
+        closeStreamFn = startAgentStream();
+        break;
+      case 'harness':
+        closeStreamFn = startHarnessStream();
+        break;
+      default:
+        closeStreamFn = startSearchStream();
+        break;
+    }
+
+    function startAgentStream() {
       const chatRequest: ChatApiRequest = {
         sessionId,
         content: request.query,
@@ -382,143 +413,16 @@ async function sendGraphRequest(request: GraphRequest, rejectedPlan: boolean) {
         type: 'agent',
       };
 
-      closeStreamFn = streamChat(
+      return streamChat(
         chatRequest,
         async (response: GraphNodeResponse) => {
           if (response.error) return;
 
-          if (isReportGeneratorNode(response)) {
-            const isNewNode =
-              currentNodeName === null ||
-              response.nodeName !== currentNodeName;
-
-            if (isNewNode) {
-              if (
-                currentBlockIndex >= 0 &&
-                sessionState.nodeBlocks[currentBlockIndex]
-              ) {
-                const p = saveNodeMessage(
-                  sessionState.nodeBlocks[currentBlockIndex]!,
-                );
-                pendingSavePromises.push(p);
-              }
-              sessionState.nodeBlocks.push([
-                { ...response, text: response.text },
-              ]);
-              currentBlockIndex = sessionState.nodeBlocks.length - 1;
-              currentNodeName = response.nodeName;
-            }
-
-            if (response.textType === 'HTML') {
-              sessionState.htmlReportContent += response.text;
-              sessionState.htmlReportSize =
-                sessionState.htmlReportContent.length;
-              const reportNode = sessionState.nodeBlocks.find(
-                (block) =>
-                  block.length > 0 &&
-                  isReportGeneratorNode(block[0]!) &&
-                  block[0]!.textType === 'HTML',
-              );
-              if (reportNode) {
-                reportNode[0]!.text = `正在收集HTML报告... 已收集 ${sessionState.htmlReportSize} 字节`;
-              } else {
-                sessionState.nodeBlocks.push([
-                  {
-                    ...response,
-                    text: `正在收集HTML报告... 已收集 ${sessionState.htmlReportSize} 字节`,
-                  },
-                ]);
-              }
-            } else if (response.textType === 'MARK_DOWN') {
-              sessionState.markdownReportContent += response.text;
-              const reportNode = sessionState.nodeBlocks.find(
-                (block) =>
-                  block.length > 0 &&
-                  isReportGeneratorNode(block[0]!) &&
-                  block[0]!.textType === 'MARK_DOWN',
-              );
-              if (reportNode) {
-                reportNode[0]!.text = `正在收集Markdown报告... 已收集 ${sessionState.markdownReportContent.length} 字节`;
-              } else {
-                sessionState.nodeBlocks.push([
-                  {
-                    ...response,
-                    text: `正在收集Markdown报告... 已收集 ${sessionState.markdownReportContent.length} 字节`,
-                  },
-                ]);
-              }
-            }
-          } else if (response.textType === TextType.RESULT_SET) {
-            currentNodeName = 'result_set';
-            if (
-              currentBlockIndex >= 0 &&
-              sessionState.nodeBlocks[currentBlockIndex]
-            ) {
-              const p = saveNodeMessage(
-                sessionState.nodeBlocks[currentBlockIndex]!,
-              );
-              pendingSavePromises.push(p);
-            }
-            sessionState.nodeBlocks.push([
-              { ...response, text: response.text },
-            ]);
-            currentBlockIndex = sessionState.nodeBlocks.length - 1;
-          } else {
-            const isNewNode =
-              currentNodeName === null ||
-              response.nodeName !== currentNodeName;
-
-            if (isNewNode) {
-              if (
-                currentBlockIndex >= 0 &&
-                sessionState.nodeBlocks[currentBlockIndex]
-              ) {
-                const p = saveNodeMessage(
-                  sessionState.nodeBlocks[currentBlockIndex]!,
-                );
-                pendingSavePromises.push(p);
-              }
-              sessionState.nodeBlocks.push([
-                { ...response, text: response.text },
-              ]);
-              currentBlockIndex = sessionState.nodeBlocks.length - 1;
-              currentNodeName = response.nodeName;
-            } else {
-              if (
-                currentBlockIndex >= 0 &&
-                sessionState.nodeBlocks[currentBlockIndex]
-              ) {
-                sessionState.nodeBlocks[currentBlockIndex]!.push({
-                  ...response,
-                  text: response.text,
-                });
-              } else {
-                sessionState.nodeBlocks.push([
-                  { ...response, text: response.text },
-                ]);
-                currentBlockIndex = sessionState.nodeBlocks.length - 1;
-                currentNodeName = response.nodeName;
-              }
-            }
-          }
-
-          if (currentSession.value?.id === sessionId) {
-            nodeBlocks.value = sessionState.nodeBlocks;
-            if (autoScroll.value) scrollToBottom();
-          }
+          handleNodeResponse(response);
         },
         async (error: Error) => {
           ElMessage.error(`请求失败: ${error.message}`);
-          if (pendingSavePromises.length > 0) {
-            await Promise.all(pendingSavePromises);
-          }
-          sessionState.isStreaming = false;
-          sessionState.closeStream = null;
-          currentNodeName = null;
-          if (currentSession.value?.id === sessionId) {
-            isStreaming.value = false;
-            await selectSession(currentSession.value);
-          }
+          handleStreamError(error);
         },
         async () => {
           if (pendingSavePromises.length > 0) {
@@ -613,16 +517,40 @@ async function sendGraphRequest(request: GraphRequest, rejectedPlan: boolean) {
             }
           }
 
-          ElMessage.success(`会话[${sessionTitle}]处理完成`);
-          currentNodeName = null;
-          sessionState.closeStream = null;
-          if (currentSession.value?.id === sessionId) {
-            await selectSession(currentSession.value);
-          }
+          handleStreamComplete();
         },
       );
-    } else {
-      closeStreamFn = streamSearch(
+    }
+
+    function startHarnessStream() {
+      const harnessRequest: HarnessChatRequest = {
+        sessionId,
+        message: request.query,
+        harnessSn: String(agent.value.sn || agent.value.id),
+      };
+
+      return streamHarnessChat(
+        harnessRequest,
+        async (response: GraphNodeResponse) => {
+          if (response.error) {
+            ElMessage.error(`处理错误: ${response.text}`);
+            return;
+          }
+
+          handleNodeResponse(response);
+        },
+        async (error: Error) => {
+          ElMessage.error(`流式请求失败: ${error.message}`);
+          handleStreamError(error);
+        },
+        async () => {
+          await handleStreamEnd();
+        },
+      );
+    }
+
+    function startSearchStream() {
+      return streamSearch(
         request,
         async (response: GraphNodeResponse) => {
           if (response.error) {
@@ -634,212 +562,226 @@ async function sendGraphRequest(request: GraphRequest, rejectedPlan: boolean) {
             sessionState.lastRequest.threadId = response.threadId;
           }
 
-          if (isReportGeneratorNode(response)) {
-            const isNewNode =
-              currentNodeName === null ||
-              response.nodeName !== currentNodeName;
+          handleNodeResponse(response);
+        },
+        async (error: Error) => {
+          ElMessage.error(`流式请求失败: ${error.message}`);
+          handleStreamError(error);
+        },
+        async () => {
+          await handleStreamEnd();
+        },
+      );
+    }
 
-            if (isNewNode) {
-              if (
-                currentBlockIndex >= 0 &&
-                sessionState.nodeBlocks[currentBlockIndex]
-              ) {
-                const p = saveNodeMessage(
-                  sessionState.nodeBlocks[currentBlockIndex]!,
-                );
-                pendingSavePromises.push(p);
-              }
-              sessionState.nodeBlocks.push([
-                { ...response, text: response.text },
-              ]);
-              currentBlockIndex = sessionState.nodeBlocks.length - 1;
-              currentNodeName = response.nodeName;
-            }
+    function handleNodeResponse(response: GraphNodeResponse) {
+      if (isReportGeneratorNode(response)) {
+        const isNewNode =
+          currentNodeName === null ||
+          response.nodeName !== currentNodeName;
 
-            if (response.textType === 'HTML') {
-              sessionState.htmlReportContent += response.text;
-              sessionState.htmlReportSize =
-                sessionState.htmlReportContent.length;
-              const reportNode = sessionState.nodeBlocks.find(
-                (block) =>
-                  block.length > 0 &&
-                  isReportGeneratorNode(block[0]!) &&
-                  block[0]!.textType === 'HTML',
-              );
-              if (reportNode) {
-                reportNode[0]!.text = `正在收集HTML报告... 已收集 ${sessionState.htmlReportSize} 字节`;
-              } else {
-                sessionState.nodeBlocks.push([
-                  {
-                    ...response,
-                    text: `正在收集HTML报告... 已收集 ${sessionState.htmlReportSize} 字节`,
-                  },
-                ]);
-              }
-            } else if (response.textType === 'MARK_DOWN') {
-              sessionState.markdownReportContent += response.text;
-              const reportNode = sessionState.nodeBlocks.find(
-                (block) =>
-                  block.length > 0 &&
-                  isReportGeneratorNode(block[0]!) &&
-                  block[0]!.textType === 'MARK_DOWN',
-              );
-              if (reportNode) {
-                reportNode[0]!.text = `正在收集Markdown报告... 已收集 ${sessionState.markdownReportContent.length} 字节`;
-              } else {
-                sessionState.nodeBlocks.push([
-                  {
-                    ...response,
-                    text: `正在收集Markdown报告... 已收集 ${sessionState.markdownReportContent.length} 字节`,
-                  },
-                ]);
-              }
-            }
-          } else if (response.textType === TextType.RESULT_SET) {
-            currentNodeName = 'result_set';
-            if (
-              currentBlockIndex >= 0 &&
-              sessionState.nodeBlocks[currentBlockIndex]
-            ) {
-              const p = saveNodeMessage(
-                sessionState.nodeBlocks[currentBlockIndex]!,
-              );
-              pendingSavePromises.push(p);
-            }
+        if (isNewNode) {
+          if (
+            currentBlockIndex >= 0 &&
+            sessionState.nodeBlocks[currentBlockIndex]
+          ) {
+            const p = saveNodeMessage(
+              sessionState.nodeBlocks[currentBlockIndex]!,
+            );
+            pendingSavePromises.push(p);
+          }
+          sessionState.nodeBlocks.push([
+            { ...response, text: response.text },
+          ]);
+          currentBlockIndex = sessionState.nodeBlocks.length - 1;
+          currentNodeName = response.nodeName;
+        }
+
+        if (response.textType === 'HTML') {
+          sessionState.htmlReportContent += response.text;
+          sessionState.htmlReportSize =
+            sessionState.htmlReportContent.length;
+          const reportNode = sessionState.nodeBlocks.find(
+            (block) =>
+              block.length > 0 &&
+              isReportGeneratorNode(block[0]!) &&
+              block[0]!.textType === 'HTML',
+          );
+          if (reportNode) {
+            reportNode[0]!.text = `正在收集HTML报告... 已收集 ${sessionState.htmlReportSize} 字节`;
+          } else {
+            sessionState.nodeBlocks.push([
+              {
+                ...response,
+                text: `正在收集HTML报告... 已收集 ${sessionState.htmlReportSize} 字节`,
+              },
+            ]);
+          }
+        } else if (response.textType === 'MARK_DOWN') {
+          sessionState.markdownReportContent += response.text;
+          const reportNode = sessionState.nodeBlocks.find(
+            (block) =>
+              block.length > 0 &&
+              isReportGeneratorNode(block[0]!) &&
+              block[0]!.textType === 'MARK_DOWN',
+          );
+          if (reportNode) {
+            reportNode[0]!.text = `正在收集Markdown报告... 已收集 ${sessionState.markdownReportContent.length} 字节`;
+          } else {
+            sessionState.nodeBlocks.push([
+              {
+                ...response,
+                text: `正在收集Markdown报告... 已收集 ${sessionState.markdownReportContent.length} 字节`,
+              },
+            ]);
+          }
+        }
+      } else if (response.textType === TextType.RESULT_SET) {
+        currentNodeName = 'result_set';
+        if (
+          currentBlockIndex >= 0 &&
+          sessionState.nodeBlocks[currentBlockIndex]
+        ) {
+          const p = saveNodeMessage(
+            sessionState.nodeBlocks[currentBlockIndex]!,
+          );
+          pendingSavePromises.push(p);
+        }
+        sessionState.nodeBlocks.push([
+          { ...response, text: response.text },
+        ]);
+        currentBlockIndex = sessionState.nodeBlocks.length - 1;
+      } else {
+        const isNewNode =
+          currentNodeName === null ||
+          response.nodeName !== currentNodeName;
+
+        if (isNewNode) {
+          if (
+            currentBlockIndex >= 0 &&
+            sessionState.nodeBlocks[currentBlockIndex]
+          ) {
+            const p = saveNodeMessage(
+              sessionState.nodeBlocks[currentBlockIndex]!,
+            );
+            pendingSavePromises.push(p);
+          }
+          sessionState.nodeBlocks.push([
+            { ...response, text: response.text },
+          ]);
+          currentBlockIndex = sessionState.nodeBlocks.length - 1;
+          currentNodeName = response.nodeName;
+        } else {
+          if (
+            currentBlockIndex >= 0 &&
+            sessionState.nodeBlocks[currentBlockIndex]
+          ) {
+            sessionState.nodeBlocks[currentBlockIndex]!.push({
+              ...response,
+              text: response.text,
+            });
+          } else {
             sessionState.nodeBlocks.push([
               { ...response, text: response.text },
             ]);
             currentBlockIndex = sessionState.nodeBlocks.length - 1;
-          } else {
-            const isNewNode =
-              currentNodeName === null ||
-              response.nodeName !== currentNodeName;
-
-            if (isNewNode) {
-              if (
-                currentBlockIndex >= 0 &&
-                sessionState.nodeBlocks[currentBlockIndex]
-              ) {
-                const p = saveNodeMessage(
-                  sessionState.nodeBlocks[currentBlockIndex]!,
-                );
-                pendingSavePromises.push(p);
-              }
-              sessionState.nodeBlocks.push([
-                { ...response, text: response.text },
-              ]);
-              currentBlockIndex = sessionState.nodeBlocks.length - 1;
-              currentNodeName = response.nodeName;
-            } else {
-              if (
-                currentBlockIndex >= 0 &&
-                sessionState.nodeBlocks[currentBlockIndex]
-              ) {
-                sessionState.nodeBlocks[currentBlockIndex]!.push({
-                  ...response,
-                  text: response.text,
-                });
-              } else {
-                sessionState.nodeBlocks.push([
-                  { ...response, text: response.text },
-                ]);
-                currentBlockIndex = sessionState.nodeBlocks.length - 1;
-                currentNodeName = response.nodeName;
-              }
-            }
+            currentNodeName = response.nodeName;
           }
+        }
+      }
 
+      if (response.needConfirm && response.buttons && response.buttons.length > 0) {
+        showHarnessConfirm.value = true;
+        pendingConfirmButtons.value = response.buttons;
+        pendingConfirmSessionId.value = response.threadId;
+        pendingConfirmAgentSn.value = response.agentId;
+      }
+
+      if (currentSession.value?.id === sessionId) {
+        nodeBlocks.value = sessionState.nodeBlocks;
+        if (autoScroll.value) scrollToBottom();
+      }
+    }
+
+    function handleStreamError(error: Error) {
+      if (pendingSavePromises.length > 0) {
+        Promise.all(pendingSavePromises);
+      }
+      sessionState.isStreaming = false;
+      sessionState.closeStream = null;
+      currentNodeName = null;
+      if (currentSession.value?.id === sessionId) {
+        isStreaming.value = false;
+        selectSession(currentSession.value);
+      }
+    }
+
+    async function handleStreamEnd() {
+      if (pendingSavePromises.length > 0) {
+        await Promise.all(pendingSavePromises);
+      }
+
+      if (sessionState.htmlReportContent) {
+        const htmlReportMessage: ChatMessage = {
+          sessionId,
+          role: 'assistant',
+          content: sessionState.htmlReportContent,
+          messageType: 'html-report',
+        };
+        try {
+          await saveMessageApi(sessionId, htmlReportMessage);
           if (currentSession.value?.id === sessionId) {
-            nodeBlocks.value = sessionState.nodeBlocks;
-            if (autoScroll.value) scrollToBottom();
+            currentMessages.value.push(htmlReportMessage);
           }
-        },
-        async (error: Error) => {
-          ElMessage.error(`流式请求失败: ${error.message}`);
-          if (pendingSavePromises.length > 0) {
-            await Promise.all(pendingSavePromises);
-          }
-          sessionState.isStreaming = false;
-          sessionState.closeStream = null;
-          currentNodeName = null;
+        } catch {
+          ElMessage.error('保存HTML报告失败！');
+        }
+      } else if (sessionState.markdownReportContent) {
+        const markdownMessage: ChatMessage = {
+          sessionId,
+          role: 'assistant',
+          content: sessionState.markdownReportContent,
+          messageType: 'markdown-report',
+        };
+        try {
+          await saveMessageApi(sessionId, markdownMessage);
           if (currentSession.value?.id === sessionId) {
-            isStreaming.value = false;
-            await selectSession(currentSession.value);
+            currentMessages.value.push(markdownMessage);
           }
-        },
-        async () => {
-          if (pendingSavePromises.length > 0) {
-            await Promise.all(pendingSavePromises);
-          }
+        } catch {
+          console.error('保存Markdown报告失败');
+        }
+      } else {
+        if (
+          currentBlockIndex >= 0 &&
+          sessionState.nodeBlocks[currentBlockIndex]
+        ) {
+          await saveNodeMessage(
+            sessionState.nodeBlocks[currentBlockIndex]!,
+          );
+        }
 
-          if (sessionState.htmlReportContent) {
-            const htmlReportMessage: ChatMessage = {
-              sessionId,
-              role: 'assistant',
-              content: sessionState.htmlReportContent,
-              messageType: 'html-report',
-            };
-            try {
-              await saveMessageApi(sessionId, htmlReportMessage);
-              if (currentSession.value?.id === sessionId) {
-                currentMessages.value.push(htmlReportMessage);
-              }
-            } catch {
-              ElMessage.error('保存HTML报告失败！');
-            }
-            sessionState.isStreaming = false;
-            if (currentSession.value?.id === sessionId) {
-              isStreaming.value = false;
-              nodeBlocks.value = [];
-            }
-          } else if (sessionState.markdownReportContent) {
-            const markdownMessage: ChatMessage = {
-              sessionId,
-              role: 'assistant',
-              content: sessionState.markdownReportContent,
-              messageType: 'markdown-report',
-            };
-            try {
-              await saveMessageApi(sessionId, markdownMessage);
-              if (currentSession.value?.id === sessionId) {
-                currentMessages.value.push(markdownMessage);
-              }
-            } catch {
-              console.error('保存Markdown报告失败');
-            }
-            sessionState.isStreaming = false;
-            if (currentSession.value?.id === sessionId) {
-              isStreaming.value = false;
-              nodeBlocks.value = [];
-            }
-          } else {
-            if (
-              currentBlockIndex >= 0 &&
-              sessionState.nodeBlocks[currentBlockIndex]
-            ) {
-              await saveNodeMessage(
-                sessionState.nodeBlocks[currentBlockIndex]!,
-              );
-            }
+        if (requestOptions.humanFeedback && rejectedPlan) {
+          showHumanFeedback.value = true;
+        }
+      }
 
-            if (requestOptions.humanFeedback && rejectedPlan) {
-              showHumanFeedback.value = true;
-            } else {
-              sessionState.isStreaming = false;
-              if (currentSession.value?.id === sessionId) {
-                isStreaming.value = false;
-              }
-            }
-          }
+      handleStreamComplete();
+    }
 
-          ElMessage.success(`会话[${sessionTitle}]处理完成`);
-          currentNodeName = null;
-          sessionState.closeStream = null;
-          if (currentSession.value?.id === sessionId) {
-            await selectSession(currentSession.value);
-          }
-        },
-      );
+    function handleStreamComplete() {
+      sessionState.isStreaming = false;
+      if (currentSession.value?.id === sessionId) {
+        isStreaming.value = false;
+        nodeBlocks.value = [];
+      }
+
+      ElMessage.success(`会话[${sessionTitle}]处理完成`);
+      currentNodeName = null;
+      sessionState.closeStream = null;
+      if (currentSession.value?.id === sessionId) {
+        selectSession(currentSession.value);
+      }
     }
 
     sessionState.closeStream = closeStreamFn;
@@ -877,8 +819,9 @@ async function downloadHtmlReportFromMessageByServer(content: string) {
   }
 }
 
-function openReportFullscreen(content: string) {
+function openReportFullscreen(content: string, msgId?: number) {
   fullscreenReportContent.value = content;
+  fullscreenReportFormat.value = getMessageFormat(msgId);
   showReportFullscreen.value = true;
 }
 
@@ -1016,6 +959,56 @@ function scrollToBottom() {
   });
 }
 
+let harnessConfirmChunkIndex = -1;
+
+async function handleHarnessButtonClick(btn: ConfirmButton) {
+  const allowed = btn.action === 'confirm';
+  showHarnessConfirm.value = false;
+  harnessConfirmChunkIndex = -1;
+  isStreaming.value = true;
+  try {
+    await confirmHarnessChat(
+      {
+        sessionId: pendingConfirmSessionId.value,
+        agentSn: pendingConfirmAgentSn.value,
+        allowed,
+      },
+      async (response) => {
+        console.log('[handleHarnessButtonClick] response text:', response.text);
+        if (harnessConfirmChunkIndex < 0) {
+          nodeBlocks.value = [...nodeBlocks.value, [response]];
+          harnessConfirmChunkIndex = nodeBlocks.value.length - 1;
+        } else {
+          const block = [...nodeBlocks.value[harnessConfirmChunkIndex]!, response];
+          const blocks = [...nodeBlocks.value];
+          blocks[harnessConfirmChunkIndex] = block;
+          nodeBlocks.value = blocks;
+        }
+        if (autoScroll.value) scrollToBottom();
+      },
+      async () => {
+        if (harnessConfirmChunkIndex >= 0) {
+          const confirmBlock = nodeBlocks.value[harnessConfirmChunkIndex];
+          if (confirmBlock) {
+            const nodeHtml = generateNodeHtml(confirmBlock);
+            const aiMessage: ChatMessage = {
+              sessionId: pendingConfirmSessionId.value,
+              role: 'assistant',
+              content: nodeHtml,
+              messageType: 'html',
+            };
+            await saveMessageApi(pendingConfirmSessionId.value, aiMessage);
+          }
+        }
+        harnessConfirmChunkIndex = -1;
+        isStreaming.value = false;
+      },
+    );
+  } catch (error: any) {
+    ElMessage.error(`操作失败: ${error.message}`);
+  }
+}
+
 async function handleHumanFeedback(
   request: GraphRequest,
   rejectedPlan: boolean,
@@ -1052,6 +1045,12 @@ async function handlePresetQuestionClick(question: string) {
 
   userInput.value = question;
   nextTick(() => sendMessage());
+}
+
+function onPresetQuestionsLoaded(payload: { hasQuestions: boolean }) {
+  if (!payload.hasQuestions) {
+    inputControlsCollapsed.value = true;
+  }
 }
 
 async function stopStreaming() {
@@ -1246,7 +1245,6 @@ onMounted(async () => {
           flex: 1;
           flex-direction: column;
           overflow: hidden;
-          background-color: white;
         "
       >
         <div class="chat-container" ref="chatContainer">
@@ -1299,7 +1297,8 @@ onMounted(async () => {
                     <el-icon><Document /></el-icon>
                     <span>报告已生成</span>
                     <el-radio-group
-                      v-model="requestOptions.reportFormat"
+                      :model-value="getMessageFormat(message.id)"
+                      @change="(val: any) => { if (message.id != null) messageReportFormat[message.id] = val }"
                       size="small"
                       class="report-format-inline"
                     >
@@ -1331,7 +1330,7 @@ onMounted(async () => {
                     <el-tooltip content="全屏查看报告" placement="top">
                       <el-button
                         type="info"
-                        @click="openReportFullscreen(message.content)"
+                        @click="openReportFullscreen(message.content, message.id)"
                       >
                         <el-icon><FullScreen /></el-icon>
                         全屏
@@ -1341,7 +1340,7 @@ onMounted(async () => {
                 </div>
                 <div class="markdown-report-content">
                   <markdown-agent-container
-                    v-if="requestOptions.reportFormat === 'markdown'"
+                    v-if="getMessageFormat(message.id) === 'markdown'"
                     class="md-body"
                     :content="message.content"
                     :options="options"
@@ -1364,11 +1363,7 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div v-if="isStreaming" class="streaming-response">
-              <div class="streaming-header">
-                <el-icon class="loading-icon"><Loading /></el-icon>
-                <span>智能体正在处理中...</span>
-              </div>
+            <div v-if="isStreaming || nodeBlocks.length > 0" class="streaming-response">
               <div class="agent-response-container">
                 <template v-for="(nodeBlock, index) in nodeBlocks" :key="index">
                   <div
@@ -1412,6 +1407,13 @@ onMounted(async () => {
                   <div v-else v-html="generateNodeHtml(nodeBlock)"></div>
                 </template>
               </div>
+              <div v-if="isStreaming" class="streaming-footer">
+                <div class="streaming-indicator">
+                  <span class="streaming-dot"></span>
+                  <span class="streaming-dot"></span>
+                  <span class="streaming-dot"></span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1421,6 +1423,23 @@ onMounted(async () => {
           :request="lastRequest!"
           :handleFeedback="handleHumanFeedback"
         />
+
+        <div v-if="showHarnessConfirm && pendingConfirmButtons.length > 0" class="harness-confirm-area">
+          <div class="harness-confirm-header">
+            <el-icon><WarningFilled /></el-icon>
+            <span>请确认操作</span>
+          </div>
+          <div class="harness-confirm-actions">
+            <el-button
+              v-for="(btn, idx) in pendingConfirmButtons"
+              :key="idx"
+              :type="(btn.type as any) || 'primary'"
+              @click="handleHarnessButtonClick(btn)"
+            >
+              {{ btn.text }}
+            </el-button>
+          </div>
+        </div>
 
         <div class="input-area" v-if="currentSession">
           <div class="input-controls">
@@ -1446,8 +1465,9 @@ onMounted(async () => {
                 v-if="currentSession && agent.id"
                 :agentId="agent.id"
                 :onQuestionClick="handlePresetQuestionClick"
+                @loaded="onPresetQuestionsLoaded"
               />
-              <div class="switch-group">
+              <div v-if="agent.type == 'sql'" class="switch-group">
                 <div class="switch-item">
                   <span class="switch-label">人工反馈</span>
                   <el-tooltip
@@ -1512,21 +1532,20 @@ onMounted(async () => {
               type="textarea"
               :rows="3"
               placeholder="请输入您的问题..."
-              :disabled="isStreaming || showHumanFeedback"
+              :disabled="isStreaming || showHarnessConfirm"
               @keydown.enter.exact.prevent="sendMessage"
             />
             <el-button
-              v-if="!isStreaming"
+              v-if="!isStreaming && !showHarnessConfirm"
               type="primary"
               @click="sendMessage"
-              :disabled="showHumanFeedback"
               circle
               class="send-button"
             >
               <el-icon><Promotion /></el-icon>
             </el-button>
             <el-button
-              v-else
+              v-if="isStreaming"
               type="danger"
               @click="stopStreaming"
               circle
@@ -1549,7 +1568,7 @@ onMounted(async () => {
           <div class="report-fullscreen-header">
             <span class="report-fullscreen-title">
               {{
-                requestOptions.reportFormat === 'markdown'
+                fullscreenReportFormat === 'markdown'
                   ? 'Markdown 报告'
                   : 'HTML 报告'
               }}
@@ -1565,7 +1584,7 @@ onMounted(async () => {
           </div>
           <div class="report-fullscreen-content">
             <markdown-agent-container
-              v-if="requestOptions.reportFormat === 'markdown'"
+              v-if="fullscreenReportFormat === 'markdown'"
               class="md-body report-fullscreen-body"
               :content="fullscreenReportContent"
               :options="options"
@@ -1586,10 +1605,10 @@ onMounted(async () => {
 .chat-container {
   flex: 1;
   padding: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 0;
   overflow-y: auto;
   background: #f8f9fa;
-  border-radius: 8px;
+  margin-left: 16px;
 }
 
 .empty-state {
@@ -1691,11 +1710,6 @@ onMounted(async () => {
   border-bottom: 1px solid #f0f0f0;
 }
 
-.loading-icon {
-  color: #409eff;
-  animation: spin 1s linear infinite;
-}
-
 .streaming-header span {
   font-weight: 500;
   color: #409eff;
@@ -1704,6 +1718,47 @@ onMounted(async () => {
 .stop-button-inline {
   width: 48px;
   height: 48px;
+}
+
+.streaming-indicator {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.streaming-footer {
+  padding-top: 12px;
+}
+
+.streaming-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #409eff;
+  animation: bounce 1.4s ease-in-out infinite both;
+}
+
+.streaming-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.streaming-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.streaming-dot:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .html-report-message {
@@ -1806,10 +1861,10 @@ onMounted(async () => {
 
 .input-area {
   flex-shrink: 0;
-  padding: 16px;
+  padding: 2px 16px 16px 16px;
   background: white;
   border: 1px solid #e8e8e8;
-  border-radius: 8px;
+  margin-left: 16px;
 }
 
 .input-controls {
@@ -1880,16 +1935,6 @@ onMounted(async () => {
   display: flex;
   gap: 12px;
   align-items: flex-end;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 768px) {
@@ -2132,6 +2177,30 @@ onMounted(async () => {
   text-align: center;
   background: #f4f4f5;
   border-radius: 4px;
+}
+
+.harness-confirm-area {
+  padding: 20px;
+  margin: 16px 0;
+  background: #fff7e6;
+  border: 1px solid #ffe7ba;
+  border-radius: 12px;
+}
+
+.harness-confirm-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #d48806;
+}
+
+.harness-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
 }
 
 .result-set-message {

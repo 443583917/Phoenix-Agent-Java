@@ -8,6 +8,12 @@ export interface GraphRequest {
   nl2sqlOnly: boolean;
 }
 
+export interface ConfirmButton {
+  text: string;
+  action: string;
+  type?: string;
+}
+
 export interface GraphNodeResponse {
   agentId: string;
   threadId: string;
@@ -16,6 +22,16 @@ export interface GraphNodeResponse {
   text: string;
   error: boolean;
   complete: boolean;
+  needConfirm?: boolean;
+  toolCalls?: any;
+  buttons?: ConfirmButton[];
+}
+
+export interface HarnessConfirmRequest {
+  sessionId: string;
+  agentSn: string;
+  allowed: boolean;
+  suggestedRules?: any[];
 }
 
 export enum TextType {
@@ -26,6 +42,12 @@ export enum TextType {
   MARK_DOWN = 'MARK_DOWN',
   RESULT_SET = 'RESULT_SET',
   TEXT = 'TEXT',
+}
+
+export interface HarnessChatRequest {
+  sessionId: string;
+  message: string;
+  harnessSn: string;
 }
 
 const API_BASE_URL = '/api';
@@ -240,4 +262,173 @@ export function streamSearch(
   return () => {
     controller.abort();
   };
+}
+
+export function streamHarnessChat(
+  request: HarnessChatRequest,
+  onMessage: (response: GraphNodeResponse) => Promise<void>,
+  onError?: (error: Error) => Promise<void>,
+  onComplete?: () => Promise<void>,
+): () => void {
+  const url = `${API_BASE_URL}/api/admin/harness/chat`;
+  const controller = new AbortController();
+
+  const doFetch = async () => {
+    try {
+      const token = localStorage.getItem('phoenix-token');
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'phoenix-token': token || '',
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) {
+        throw new Error('No reader available');
+      }
+
+      let buffer = '';
+      let currentData = '';
+
+      const dispatchEvent = async () => {
+        if (currentData) {
+          try {
+            const parsed = JSON.parse(currentData);
+            if (parsed.end) {
+              await onComplete?.();
+              return;
+            }
+            const nodeResponse: GraphNodeResponse = {
+              agentId: request.harnessSn,
+              threadId: request.sessionId,
+              nodeName: 'Harness',
+              textType: TextType.MARK_DOWN,
+              text: parsed.content || '',
+              error: false,
+              complete: false,
+              needConfirm: parsed.needConfirm || false,
+              toolCalls: parsed.toolCalls || undefined,
+              buttons: parsed.buttons || undefined,
+            };
+            await onMessage(nodeResponse);
+          } catch {
+            await onError?.(new Error('Failed to parse server response'));
+          }
+        }
+        currentData = '';
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n');
+        buffer = parts.pop() || '';
+        for (const line of parts) {
+          if (line === '') {
+            await dispatchEvent();
+          } else if (line.startsWith('data:')) {
+            currentData = line.slice(5).trim();
+          }
+        }
+      }
+      if (buffer) {
+        const line = buffer.trim();
+        if (line.startsWith('data:')) {
+          currentData = line.slice(5).trim();
+          await dispatchEvent();
+        }
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') return;
+      await onError?.(new Error('Stream connection failed'));
+    }
+  };
+
+  doFetch();
+
+  return () => {
+    controller.abort();
+  };
+}
+
+export async function confirmHarnessChat(
+  request: HarnessConfirmRequest,
+  onMessage?: (response: GraphNodeResponse) => Promise<void>,
+  onComplete?: () => Promise<void>,
+): Promise<void> {
+  const token = localStorage.getItem('phoenix-token');
+  console.log('[confirmHarnessChat] sending request', request);
+  const httpResponse = await fetch(`${API_BASE_URL}/api/admin/harness/confirm`, {
+    method: 'POST',
+    headers: {
+      'phoenix-token': token || '',
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify(request),
+  });
+  console.log('[confirmHarnessChat] response status', httpResponse.status);
+  if (!httpResponse.ok) {
+    throw new Error(`Confirm request failed! status: ${httpResponse.status}`);
+  }
+  const reader = httpResponse.body?.getReader();
+  const decoder = new TextDecoder();
+  if (!reader) return;
+  let buffer = '';
+  let currentData = '';
+  const dispatchEvent = async () => {
+    if (currentData) {
+      try {
+        const parsed = JSON.parse(currentData);
+        if (parsed.end) {
+          await onComplete?.();
+          return;
+        }
+        const nodeResponse: GraphNodeResponse = {
+          agentId: request.agentSn,
+          threadId: request.sessionId,
+          nodeName: 'Harness',
+          textType: TextType.MARK_DOWN,
+          text: parsed.content || '',
+          error: false,
+          complete: false,
+        };
+        await onMessage?.(nodeResponse);
+        console.log('[confirmHarnessChat] received', parsed);
+      } catch (e) {
+        console.error('[confirmHarnessChat] parse error:', currentData, e);
+      }
+    }
+    currentData = '';
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n');
+    buffer = parts.pop() || '';
+    for (const line of parts) {
+      if (line === '') {
+        await dispatchEvent();
+      } else if (line.startsWith('data:')) {
+        currentData = line.slice(5).trim();
+      }
+    }
+  }
+  if (buffer) {
+    const line = buffer.trim();
+    if (line.startsWith('data:')) {
+      currentData = line.slice(5).trim();
+      await dispatchEvent();
+    }
+  }
 }

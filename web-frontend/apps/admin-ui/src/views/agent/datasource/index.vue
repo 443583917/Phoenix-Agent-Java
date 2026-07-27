@@ -1108,6 +1108,12 @@ onMounted(() => {
   align-items: center;
 }
 
+.filter-options :deep(.el-button:not(.el-button--primary):hover) {
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
 .datasource-table {
   margin-bottom: 1.5rem;
 }

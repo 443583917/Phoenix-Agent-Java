@@ -5,7 +5,7 @@
     <strong><a href="https://github.com/alibaba/spring-ai-alibaba" target="_blank">Spring AI Alibaba 2.0.0-M1.1</a> Graph 的企业级 AI Agent 管理与分析引擎</strong>
   </p>
   <p>
-    <strong><a href="https://java2ai.com/agents/dataagent/quick-start" target="_blank">Spring AI Alibaba Data Agent</a>Spring AI Alibaba的自然语言转SQL项目</strong>
+    <strong><a href="https://java2ai.com/agents/dataagent/quick-start" target="_blank">Spring AI Alibaba Data Agent</a> Spring AI Alibaba的自然语言转SQL项目</strong>
   </p>
   <p>
     NL2SQL 智能报表 | Python 深度分析 | 自定义智能体 | MCP 服务器 | RAG 增强 | Vben5 管理后台
@@ -17,7 +17,6 @@
     <img src="https://img.shields.io/badge/Vben-5-blueviolet" alt="Vben5">
     <img src="https://img.shields.io/badge/License-Apache%202.0-red" alt="License">
   </p>
-
   <p>
     <a href="#-项目简介">项目简介</a> •
     <a href="#-核心特性">核心特性</a> •

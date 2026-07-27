@@ -20,7 +20,6 @@ import {
   ElInput,
   ElInputNumber,
   ElMessage,
-  ElMessageBox,
   ElOption,
   ElSelect,
   ElSwitch,
@@ -37,6 +36,7 @@ import {
   getPvaluesBySystemApi,
   updateModuleApi,
 } from '#/api';
+import {VbenTableAction} from "#/adapter/vxe-table";
 
 const loading = ref(false);
 const tableData = ref<PrivilegeModule[]>([]);
@@ -219,7 +219,6 @@ const [FilterForm] = useVbenForm({
   commonConfig: { componentProps: { clearable: true } },
   layout: 'inline',
   wrapperClass: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
-  actionButtonsReverse: true,
   submitButtonOptions: { content: '查询' },
   schema: [
     {
@@ -341,21 +340,37 @@ async function handleSubmit() {
 
 async function handleDelete(id: string, name: string) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除菜单 "${name}" 吗？此操作不可恢复。`,
-      '删除确认',
-      {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        confirmButtonType: 'danger',
-      },
-    );
     await deleteModuleApi(id);
     ElMessage.success('菜单删除成功');
     loadData();
   } catch {
-    // cancelled or error
+    ElMessage.error('删除失败');
   }
+}
+function getActions(row: any) {
+  return [
+    {
+      text: '新增',
+      onClick: () => handleAddChild(row as PrivilegeModule),
+    },
+    {
+      text: '修改',
+      onClick: () => handleEdit(row as PrivilegeModule),
+    },
+    {
+      text: '删除',
+      danger: true,
+      popConfirm: {
+        title: `确定要删除【${(row as PrivilegeModule).name}】吗？`,
+        confirm: () => handleDelete(
+            (row as PrivilegeModule).id!,
+            (row as PrivilegeModule).name!,
+        ),
+        okText: '确定',
+        cancelText: '取消',
+      },
+    },
+  ];
 }
 
 onMounted(() => {
@@ -366,9 +381,11 @@ onMounted(() => {
 <template>
   <Page auto-content-height>
     <div class="page-container">
-      <ElCard class="table-section" :body-style="{ padding: '20px' }">
+      <ElCard class="search-section" :body-style="{ padding: '12px 20px' }">
         <FilterForm />
+      </ElCard>
 
+      <ElCard class="table-section" :body-style="{ padding: '20px' }">
         <div class="table-toolbar">
           <ElButton type="primary" @click="showAddDialog">
             <ElIcon><IconifyIcon icon="lucide:plus" /></ElIcon>
@@ -478,34 +495,9 @@ onMounted(() => {
               <span v-else class="acl-state-empty">-</span>
             </template>
           </ElTableColumn>
-          <ElTableColumn label="操作" width="200" fixed="right">
-            <template #default="scope">
-              <ElButton
-                type="primary"
-                size="small"
-                @click="handleAddChild(scope.row as PrivilegeModule)"
-              >
-                新增
-              </ElButton>
-              <ElButton
-                type="warning"
-                size="small"
-                @click="handleEdit(scope.row as PrivilegeModule)"
-              >
-                编辑
-              </ElButton>
-              <ElButton
-                type="danger"
-                size="small"
-                @click="
-                  handleDelete(
-                    (scope.row as PrivilegeModule).id!,
-                    (scope.row as PrivilegeModule).name!,
-                  )
-                "
-              >
-                删除
-              </ElButton>
+          <ElTableColumn label="操作" width="200">
+            <template #default="{ row }">
+              <VbenTableAction :actions="getActions(row)" />
             </template>
           </ElTableColumn>
         </ElTable>
@@ -688,12 +680,22 @@ onMounted(() => {
   @apply bg-background-deep;
 }
 
+.search-section {
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.search-section :deep(.vben-form) {
+  align-items: center;
+}
+
 .table-section {
   border-radius: 12px;
 }
 
 .table-toolbar {
   display: flex;
+  justify-content: flex-end;
   gap: 0.75rem;
   margin-bottom: 1rem;
 }
