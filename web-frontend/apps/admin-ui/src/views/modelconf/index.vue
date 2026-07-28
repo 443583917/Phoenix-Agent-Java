@@ -112,7 +112,7 @@ const providerBaseUrlMap: Record<string, string> = {
   qwen: 'https://dashscope.aliyuncs.com/compatible-mode',
   openai: 'https://api.openai.com',
   siliconflow: 'https://api.siliconflow.cn',
-  custom: '',
+  custom: 'https://modelservice.jdcloud.com/',
 };
 
 function updateBaseUrlByProvider(provider: string) {
