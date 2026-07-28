@@ -434,7 +434,7 @@ async function handleRegenerate(idx: number) {
               />
             </template>
             <ChatBubble
-                v-if="isActiveSessionSending"
+                v-if="isActiveSessionSending && !activeMessages.some((m: any) => m.streaming)"
                 role="assistant"
                 typing
             />
