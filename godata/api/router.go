@@ -63,6 +63,31 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			userGroup.PUT("/reset-password/:id", userHandler.ResetPassword)
 		}
 
+		// 角色管理
+		roleHandler := privilege.NewRoleHandler(privilegeSvc)
+		roleGroup := api.Group("/privilege/role")
+		{
+			roleGroup.POST("/page", roleHandler.Page)
+			roleGroup.GET("/:id", roleHandler.GetByID)
+			roleGroup.GET("/company/:companyId", roleHandler.GetByCompany)
+			roleGroup.POST("", roleHandler.Create)
+			roleGroup.PUT("", roleHandler.Update)
+			roleGroup.DELETE("/:id", roleHandler.Delete)
+			roleGroup.GET("/:roleId/acls", roleHandler.GetAcls)
+		}
+
+		// 用户-角色关联管理
+		userRoleHandler := privilege.NewUserRoleHandler(privilegeSvc)
+		userRoleGroup := api.Group("/privilege/user-role")
+		{
+			userRoleGroup.GET("/user/:userId", userRoleHandler.GetByUser)
+			userRoleGroup.GET("/role/:roleId", userRoleHandler.GetByRole)
+			userRoleGroup.POST("", userRoleHandler.Create)
+			userRoleGroup.DELETE("/:id", userRoleHandler.Delete)
+			userRoleGroup.POST("/batch-save", userRoleHandler.BatchSave)
+			userRoleGroup.DELETE("/batch-remove", userRoleHandler.BatchRemove)
+		}
+
 		// Phase 4: agentGroup := api.Group("/agent")
 		// Phase 5: datasourceGroup := api.Group("/datasource")
 		// Phase 5: chatGroup := api.Group("")

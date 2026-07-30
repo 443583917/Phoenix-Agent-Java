@@ -113,7 +113,22 @@ func (s *PrivilegeService) GetRoleAcls(ctx context.Context, roleID string) ([]mo
 	return s.uc.GetRoleAcls(ctx, roleID)
 }
 
+// GetRolesByCompanyID returns all roles for the given company.
+func (s *PrivilegeService) GetRolesByCompanyID(ctx context.Context, companyID int64) ([]*model.PrivilegeRole, error) {
+	return s.uc.GetRolesByCompanyID(ctx, companyID)
+}
+
 // ──────────────────────────── User-Role ────────────────────────────
+
+// GetUserRolesByUserID returns all user-role associations for a user.
+func (s *PrivilegeService) GetUserRolesByUserID(ctx context.Context, userID string) ([]*model.PrivilegeUserRoleVO, error) {
+	return s.uc.GetUserRolesByUserID(ctx, userID)
+}
+
+// GetUserRolesByRoleID returns all user-role associations for a role.
+func (s *PrivilegeService) GetUserRolesByRoleID(ctx context.Context, roleID string) ([]*model.PrivilegeUserRoleVO, error) {
+	return s.uc.GetUserRolesByRoleID(ctx, roleID)
+}
 
 // SaveUserRoles assigns a single role to a user.
 func (s *PrivilegeService) SaveUserRoles(ctx context.Context, dto model.PrivilegeUserRoleDTO) error {

@@ -419,6 +419,11 @@ func (u *PrivilegeUsecase) GetRoleByID(ctx context.Context, id string) (*model.P
 	}, nil
 }
 
+// GetRolesByCompanyID returns all roles for the given company.
+func (u *PrivilegeUsecase) GetRolesByCompanyID(ctx context.Context, companyID int64) ([]*model.PrivilegeRole, error) {
+	return u.roleRepo.FindByCompanyID(ctx, companyID)
+}
+
 // GetRoleAcls returns the ACL entries for a role, decorated with module names.
 func (u *PrivilegeUsecase) GetRoleAcls(ctx context.Context, roleID string) ([]model.RoleAclVO, error) {
 	acls, err := u.aclRepo.FindByRoleID(ctx, roleID)
@@ -442,6 +447,24 @@ func (u *PrivilegeUsecase) GetRoleAcls(ctx context.Context, roleID string) ([]mo
 }
 
 // ──────────────────────────── User-Role ────────────────────────────
+
+// GetUserRolesByUserID returns all user-role associations for a user, decorated with names.
+func (u *PrivilegeUsecase) GetUserRolesByUserID(ctx context.Context, userID string) ([]*model.PrivilegeUserRoleVO, error) {
+	list, err := u.userRoleRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return buildUserRoleVOs(ctx, list, u), nil
+}
+
+// GetUserRolesByRoleID returns all user-role associations for a role, decorated with names.
+func (u *PrivilegeUsecase) GetUserRolesByRoleID(ctx context.Context, roleID string) ([]*model.PrivilegeUserRoleVO, error) {
+	list, err := u.userRoleRepo.FindByRoleID(ctx, roleID)
+	if err != nil {
+		return nil, err
+	}
+	return buildUserRoleVOs(ctx, list, u), nil
+}
 
 // SaveUserRoles assigns a single role to a user.
 func (u *PrivilegeUsecase) SaveUserRoles(ctx context.Context, dto model.PrivilegeUserRoleDTO) error {
@@ -887,6 +910,28 @@ func userToVO(user *model.PrivilegeUser) *model.PrivilegeUserVO {
 		UserType:   user.UserType,
 		CreateTime: user.CreateTime,
 	}
+}
+
+func buildUserRoleVOs(ctx context.Context, list []*model.PrivilegeUserRole, u *PrivilegeUsecase) []*model.PrivilegeUserRoleVO {
+	vos := make([]*model.PrivilegeUserRoleVO, len(list))
+	for i, ur := range list {
+		username := ""
+		if user, _ := u.userRepo.FindByID(ctx, ur.UserID); user != nil {
+			username = user.Username
+		}
+		roleName := ""
+		if role, _ := u.roleRepo.FindByID(ctx, ur.RoleID); role != nil {
+			roleName = role.Name
+		}
+		vos[i] = &model.PrivilegeUserRoleVO{
+			BaseModel: ur.BaseModel,
+			UserID:    ur.UserID,
+			RoleID:    ur.RoleID,
+			RoleName:  roleName,
+			Username:  username,
+		}
+	}
+	return vos
 }
 
 func employeeToVO(emp *model.PrivilegeEmployee) *model.PrivilegeEmployeeVO {

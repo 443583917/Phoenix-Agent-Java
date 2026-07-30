@@ -41,6 +41,7 @@ type PrivilegeUserPageQuery struct {
 
 // PrivilegeRoleDTO — 角色创建/更新请求
 type PrivilegeRoleDTO struct {
+	ID         string `json:"id"`
 	Name       string `json:"name" binding:"required"`
 	SN         string `json:"sn"`
 	RoleLevel  string `json:"roleLevel"`
