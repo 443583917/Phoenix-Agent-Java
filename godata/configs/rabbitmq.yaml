@@ -1,0 +1,6 @@
+rabbitmq:
+  addr: "amqp://guest:guest@127.0.0.1:5672/"
+  exchange: "phoenix.events"
+  prefetch_count: 10
+  reconnect_delay: "3s"
+  max_reconnect_attempts: 5

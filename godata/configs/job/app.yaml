@@ -1,0 +1,4 @@
+job:
+  cron_specs:
+    daily_report: "0 8 * * *"
+    audit_sync: "*/30 * * * *"

@@ -1,0 +1,7 @@
+milvus:
+  addr: "127.0.0.1:19530"
+  collection: "phoenix_vectors"
+  dim: 512
+  index_type: "HNSW"
+  metric_type: "COSINE"
+  timeout: "30s"

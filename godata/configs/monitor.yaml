@@ -1,0 +1,7 @@
+monitor:
+  otel_endpoint: "127.0.0.1:4317"
+  service_name: "phoenix-go"
+  service_version: "2.0.0"
+  trace_sample_rate: 1.0
+  log_level: "info"
+  log_format: "json"

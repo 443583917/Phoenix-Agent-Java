@@ -1,0 +1,10 @@
+agent:
+  model:
+    provider: "deepseek"
+    model: "deepseek-chat"
+    api_key: "${AI_API_KEY}"
+    base_url: "https://api.deepseek.com"
+  stream: true
+  max_tokens: 4096
+  temperature: 0.7
+  session_timeout: "30m"
