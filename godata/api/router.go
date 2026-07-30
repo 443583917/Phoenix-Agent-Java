@@ -227,7 +227,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			group.PUT("", groupInfoHandler.Update)
 			group.DELETE("/:id", groupInfoHandler.Delete)
 			group.PUT("/:id/toggle-status", groupInfoHandler.ToggleStatus)
-			group.DELETE("/:groupId/agent/:agentId", groupInfoHandler.RemoveAgent)
+			group.DELETE("/remove-agent/:groupId/:agentId", groupInfoHandler.RemoveAgent)
 		}
 
 		// ── GroupAgentInfo ──
