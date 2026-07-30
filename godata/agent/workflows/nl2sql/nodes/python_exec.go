@@ -3,7 +3,7 @@ package nodes
 import (
 	"context"
 
-	nl2sql "github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
+	"trpc.group/trpc-go/trpc-agent-go/graph"
 )
 
 // PythonExecuteNode executes Python code for data processing.
@@ -14,11 +14,16 @@ func (n *PythonExecuteNode) Name() string {
 	return "python_execute"
 }
 
-// Execute sets a stub execution result.
-func (n *PythonExecuteNode) Execute(ctx context.Context, state *nl2sql.NL2SQLState) (*nl2sql.NodeOutput, error) {
-	state.ExecutionResult = map[string]interface{}{
+// Execute implements graph.NodeFunc for the tRPC-Agent-Go StateGraph.
+func (n *PythonExecuteNode) Execute(ctx context.Context, state graph.State) (any, error) {
+	nl2state := getOrCreateState(state)
+	nl2state.ExecutionResult = map[string]interface{}{
 		"stub":    true,
 		"message": "Python execution stub - Phase 5",
 	}
-	return &nl2sql.NodeOutput{NextNode: "report_generate"}, nil
+	nl2state.CurrentNode = n.Name()
+
+	return graph.State{
+		"nl2sql_state": nl2state,
+	}, nil
 }

@@ -3,7 +3,7 @@ package nodes
 import (
 	"context"
 
-	nl2sql "github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
+	"trpc.group/trpc-go/trpc-agent-go/graph"
 )
 
 // IntentRecognitionNode classifies the user's intent.
@@ -14,9 +14,15 @@ func (n *IntentRecognitionNode) Name() string {
 	return "intent_recognition"
 }
 
-// Execute classifies intent and sets stub values.
-func (n *IntentRecognitionNode) Execute(ctx context.Context, state *nl2sql.NL2SQLState) (*nl2sql.NodeOutput, error) {
-	state.Intent = "sql"
-	state.IntentConfidence = 0.95
-	return &nl2sql.NodeOutput{NextNode: "evidence_recall"}, nil
+// Execute implements graph.NodeFunc for the tRPC-Agent-Go StateGraph.
+// It classifies intent and updates the NL2SQLState.
+func (n *IntentRecognitionNode) Execute(ctx context.Context, state graph.State) (any, error) {
+	nl2state := getOrCreateState(state)
+	nl2state.Intent = "sql"
+	nl2state.IntentConfidence = 0.95
+	nl2state.CurrentNode = n.Name()
+
+	return graph.State{
+		"nl2sql_state": nl2state,
+	}, nil
 }

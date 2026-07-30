@@ -7,11 +7,30 @@ import (
 )
 
 // HitlHandler manages Human-In-The-Loop confirm/reject state for tool calls
-// emitted by Harness agents.
+// emitted by agents.
 //
 // When an agent emits a tool_call event, the caller should register the
 // pending confirmation via RegisterPending and await external approval
 // (e.g. from a UI button click) via HandleConfirm.
+//
+// NOTE: The tRPC-Agent-Go framework provides tool callbacks via
+// tool.Callbacks and model.Callbacks. For server-side HITL patterns,
+// the framework's interrupt/resume mechanism (graph.Interrupt) or
+// BeforeTool callbacks can intercept tool calls before execution.
+// This custom handler complements those patterns for Phoenix's
+// web-based confirmation flow where approvals arrive asynchronously
+// from the UI via HTTP endpoints.
+//
+// Framework integration: When an agent is configured with tool
+// callbacks, the BeforeTool callback can call RegisterPending to
+// pause execution until the user confirms via HandleConfirm:
+//
+//	toolCallbacks := tool.NewCallbacks()
+//	toolCallbacks.RegisterBeforeTool(func(ctx, args) (any, error) {
+//	    approved := <-handler.RegisterPending(confirmID, sessionID)
+//	    if !approved { return nil, errors.New("rejected by user") }
+//	    return nil, nil
+//	})
 type HitlHandler struct {
 	mu      sync.RWMutex
 	pending map[string]*hitlEntry

@@ -28,6 +28,8 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"trpc.group/trpc-go/trpc-agent-go/session/inmemory"
 )
 
 func main() {
@@ -94,8 +96,9 @@ func main() {
 		zap.L().Warn("database unavailable, privilege and platform endpoints will return errors")
 	}
 
-	// 初始化 Agent 框架
-	agentManager := initAgentManager(cfg)
+	// 初始化 Agent 框架 (session service, agent manager, HITL handler)
+	sessSvc := inmemory.NewSessionService()
+	agentManager := initAgentManager(cfg, sessSvc)
 	hitlHandler := runner.NewHitlHandler()
 
 	// 设置路由
@@ -133,8 +136,9 @@ func main() {
 	zap.L().Info("server stopped")
 }
 
-// initAgentManager creates and configures the AgentManager with a default agent.
-func initAgentManager(cfg *config.AppConfig) *runtime.AgentManager {
+// initAgentManager creates and configures the AgentManager with a default agent
+// and the tRPC-Agent-Go session service for automatic conversation persistence.
+func initAgentManager(cfg *config.AppConfig, sessSvc *inmemory.SessionService) *runtime.AgentManager {
 	registry := runtime.NewAgentRegistry()
 
 	// Register a default agent from config.
@@ -157,7 +161,7 @@ func initAgentManager(cfg *config.AppConfig) *runtime.AgentManager {
 		zap.Float64("temperature", defaultAgent.Temperature),
 	)
 
-	return runtime.NewAgentManager(registry)
+	return runtime.NewAgentManager(registry, sessSvc)
 }
 
 // initDB attempts to connect to PostgreSQL. If the connection fails, it logs

@@ -3,7 +3,7 @@ package nodes
 import (
 	"context"
 
-	nl2sql "github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
+	"trpc.group/trpc-go/trpc-agent-go/graph"
 )
 
 // ReportGeneratorNode generates the final HTML report.
@@ -14,8 +14,13 @@ func (n *ReportGeneratorNode) Name() string {
 	return "report_generate"
 }
 
-// Execute sets a stub HTML report.
-func (n *ReportGeneratorNode) Execute(ctx context.Context, state *nl2sql.NL2SQLState) (*nl2sql.NodeOutput, error) {
-	state.ReportContent = "<html><body><h1>NL2SQL Report Stub</h1><p>Phase 5 placeholder report</p></body></html>"
-	return &nl2sql.NodeOutput{NextNode: "end"}, nil
+// Execute implements graph.NodeFunc for the tRPC-Agent-Go StateGraph.
+func (n *ReportGeneratorNode) Execute(ctx context.Context, state graph.State) (any, error) {
+	nl2state := getOrCreateState(state)
+	nl2state.ReportContent = "<html><body><h1>NL2SQL Report Stub</h1><p>Phase 5 placeholder report</p></body></html>"
+	nl2state.CurrentNode = n.Name()
+
+	return graph.State{
+		"nl2sql_state": nl2state,
+	}, nil
 }

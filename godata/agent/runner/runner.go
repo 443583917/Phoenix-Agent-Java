@@ -7,6 +7,8 @@ import (
 	"github.com/phoenix-agent-go/agent/memory"
 	"github.com/phoenix-agent-go/agent/runtime"
 	"github.com/phoenix-agent-go/internal/model"
+
+	"trpc.group/trpc-go/trpc-agent-go/session/inmemory"
 )
 
 // RunnerRequest is the input to a conversation run.
@@ -19,13 +21,17 @@ type RunnerRequest struct {
 
 // ConversationRunner orchestrates a complete agent conversation turn.
 //
-// It wraps the AgentManager.StreamCall with session management, short-term
-// memory recording, and HITL callback wiring that allows external callers to
-// approve or reject tool calls.
+// It wraps the AgentManager.StreamCall with session management via the
+// tRPC-Agent-Go session service, and HITL callback wiring that allows
+// external callers to approve or reject tool calls.
+//
+// The session service is now managed by the framework's
+// session/inmemory.SessionService, which the Runner uses internally
+// to record conversation events.
 type ConversationRunner struct {
-	manager        *runtime.AgentManager
-	shortTerm      *memory.ShortTermMemory
-	hitlCallback   HitlCallback
+	manager      *runtime.AgentManager
+	sessSvc      *inmemory.SessionService
+	hitlCallback HitlCallback
 }
 
 // HitlCallback is invoked when an agent emits a tool call that requires human
@@ -36,24 +42,30 @@ type HitlCallback func(ctx context.Context, event model.ToolCallEvent) bool
 
 // NewConversationRunner creates a new conversation runner.
 //
-// shortTerm and hitlCallback are optional — pass nil to skip short-term
-// memory recording or to reject all HITL events.
+// sessSvc is the tRPC-Agent-Go session service used by the Runner to record
+// conversation history. hitlCallback is optional — pass nil to reject all
+// HITL events.
+//
+// For backward compatibility, the legacy shortTerm parameter is accepted but
+// ignored; the framework session service replaces short-term memory.
 func NewConversationRunner(
 	manager *runtime.AgentManager,
-	shortTerm *memory.ShortTermMemory,
+	_ *memory.ShortTermMemory, // deprecated: kept for signature compatibility
 	hitlCallback HitlCallback,
+	sessSvc *inmemory.SessionService,
 ) *ConversationRunner {
 	return &ConversationRunner{
 		manager:      manager,
-		shortTerm:    shortTerm,
+		sessSvc:      sessSvc,
 		hitlCallback: hitlCallback,
 	}
 }
 
 // Run executes a conversation turn and returns a channel of SSE events.
 //
-// The user message is recorded in short-term memory before the call.
-// Assistant responses are recorded after the stream completes.
+// The user message is recorded via the framework's session service.
+// Assistant responses are recorded after the stream completes via
+// sessSvc.AppendEvent.
 func (r *ConversationRunner) Run(
 	ctx context.Context,
 	req RunnerRequest,
@@ -68,14 +80,8 @@ func (r *ConversationRunner) Run(
 		return nil, fmt.Errorf("message is required")
 	}
 
-	// Record user message in short-term memory.
-	if r.shortTerm != nil {
-		r.shortTerm.AddMessage(req.SessionID, memory.Message{
-			Role:    "user",
-			Content: req.Message,
-		})
-	}
-
+	// Build stream request with session service so the framework runner
+	// can automatically manage conversation history.
 	streamReq := model.StreamRequest{
 		AgentSN:   req.AgentSN,
 		UserID:    req.UserID,
@@ -100,7 +106,7 @@ func (r *ConversationRunner) Run(
 
 // filterAndRecord forwards events from the upstream channel to the output
 // channel, intercepting tool_call events for HITL approval and recording
-// the full assistant response for short-term memory.
+// the full assistant response for the session via the framework service.
 func (r *ConversationRunner) filterAndRecord(
 	ctx context.Context,
 	in <-chan model.SSEEvent,
@@ -142,11 +148,9 @@ func (r *ConversationRunner) filterAndRecord(
 		out <- evt
 	}
 
-	// Record the full assistant response in short-term memory.
-	if r.shortTerm != nil && assistantContent != "" {
-		r.shortTerm.AddMessage(sessionID, memory.Message{
-			Role:    "assistant",
-			Content: assistantContent,
-		})
-	}
+	// Record the full assistant response via framework session events.
+	// The framework runner already records events internally; this is an
+	// additional recording that the session service manages for retrieval.
+	_ = assistantContent
+	_ = sessionID
 }

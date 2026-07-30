@@ -12,20 +12,25 @@ import (
 	tmodel "trpc.group/trpc-go/trpc-agent-go/model"
 	"trpc.group/trpc-go/trpc-agent-go/model/openai"
 	"trpc.group/trpc-go/trpc-agent-go/runner"
+	"trpc.group/trpc-go/trpc-agent-go/session/inmemory"
 )
 
 // AgentManager manages the lifecycle of tRPC-Agent-Go agents and provides
-// streaming call functionality via the runner.
+// streaming call functionality via the framework runner.
 //
 // Each StreamCall creates a fresh tRPC-Agent-Go agent and runner instance
-// for request isolation.
+// for request isolation. The session service is passed to the framework
+// Runner so conversation history is automatically managed.
 type AgentManager struct {
 	registry *AgentRegistry
+	sessSvc  *inmemory.SessionService
 }
 
 // NewAgentManager creates a new AgentManager with the given agent registry.
-func NewAgentManager(registry *AgentRegistry) *AgentManager {
-	return &AgentManager{registry: registry}
+// sessSvc is the tRPC-Agent-Go session service used for persisting
+// conversation events across runs.
+func NewAgentManager(registry *AgentRegistry, sessSvc *inmemory.SessionService) *AgentManager {
+	return &AgentManager{registry: registry, sessSvc: sessSvc}
 }
 
 // Registry returns the underlying agent registry for external configuration.
@@ -33,11 +38,19 @@ func (m *AgentManager) Registry() *AgentRegistry {
 	return m.registry
 }
 
+// GetSessionService returns the session service used by this manager.
+func (m *AgentManager) GetSessionService() *inmemory.SessionService {
+	return m.sessSvc
+}
+
 // StreamCall executes a streaming agent call and returns a channel of SSE events.
 //
 // It creates a fresh tRPC-Agent-Go agent and runner for each call, sends the
 // user message, and converts runner events into SSEEvent values on the returned
 // channel. The channel is closed when the run completes.
+//
+// The session service is passed to the framework Runner via
+// runner.WithSessionService so events are automatically persisted.
 func (m *AgentManager) StreamCall(
 	ctx context.Context,
 	req model.StreamRequest,
@@ -82,8 +95,14 @@ func (m *AgentManager) StreamCall(
 	}
 	llmAgent := llmagent.New(req.AgentSN, agentOpts...)
 
+	// Build runner options with session service for automatic event persistence.
+	runnerOpts := []runner.Option{}
+	if m.sessSvc != nil {
+		runnerOpts = append(runnerOpts, runner.WithSessionService(m.sessSvc))
+	}
+
 	// Create runner and execute.
-	r := runner.NewRunner(req.AgentSN+"-app", llmAgent)
+	r := runner.NewRunner(req.AgentSN+"-app", llmAgent, runnerOpts...)
 	events, err := r.Run(
 		ctx, req.UserID, req.SessionID, tmodel.NewUserMessage(req.Message),
 	)
@@ -115,9 +134,9 @@ func (m *AgentManager) StreamCall(
 // convertRunnerEvent converts a tRPC-Agent-Go runner Event to an SSEEvent.
 //
 // Handles:
-//   - Chat completion chunks with text content → ContentEvent
-//   - Tool call events → ToolCallEvent
-//   - Error responses → ErrorEvent
+//   - Chat completion chunks with text content -> ContentEvent
+//   - Tool call events -> ToolCallEvent
+//   - Error responses -> ErrorEvent
 func convertRunnerEvent(evt *event.Event) model.SSEEvent {
 	// Handle API-level errors in the response.
 	if evt.Response != nil && evt.Response.Error != nil {

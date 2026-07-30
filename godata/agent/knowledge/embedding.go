@@ -1,13 +1,9 @@
 package knowledge
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
+
+	openaiembed "trpc.group/trpc-go/trpc-agent-go/knowledge/embedder/openai"
 )
 
 // EmbeddingConfig holds the configuration for an OpenAI-compatible embedding API.
@@ -16,153 +12,72 @@ type EmbeddingConfig struct {
 	BaseURL string
 	// APIKey is the authentication key.
 	APIKey string
-	// Model is the embedding model name (e.g. "text-embedding-ada-002").
+	// Model is the embedding model name (e.g. "text-embedding-3-small").
 	Model string
 }
 
-// EmbeddingModel calls an OpenAI-compatible embedding API to produce vector
-// representations of text.
+// EmbeddingModel wraps the tRPC-Agent-Go openaiembed.Embedder to provide a
+// simplified interface for the Phoenix agent layer. The framework handles
+// HTTP transport, retries, authentication, and tracing internally.
 type EmbeddingModel struct {
-	cfg    EmbeddingConfig
-	client *http.Client
+	cfg      EmbeddingConfig
+	embedder *openaiembed.Embedder
 }
 
-// NewEmbeddingModel creates a new embedding model instance.
+// NewEmbeddingModel creates a new embedding model instance backed by the
+// tRPC-Agent-Go OpenAI embedder.
 func NewEmbeddingModel(cfg EmbeddingConfig) *EmbeddingModel {
 	if cfg.Model == "" {
-		cfg.Model = "text-embedding-ada-002"
+		cfg.Model = "text-embedding-3-small"
+	}
+	opts := []openaiembed.Option{
+		openaiembed.WithModel(cfg.Model),
+	}
+	if cfg.BaseURL != "" {
+		opts = append(opts, openaiembed.WithBaseURL(cfg.BaseURL))
+	}
+	if cfg.APIKey != "" {
+		opts = append(opts, openaiembed.WithAPIKey(cfg.APIKey))
 	}
 	return &EmbeddingModel{
-		cfg:    cfg,
-		client: &http.Client{Timeout: 30 * time.Second},
+		cfg:      cfg,
+		embedder: openaiembed.New(opts...),
 	}
 }
 
 // Embed generates an embedding vector for the given text.
-func (e *EmbeddingModel) Embed(ctx context.Context, text string) ([]float32, error) {
+// Returns float64 slice to match the framework embedder.Embedder interface.
+func (e *EmbeddingModel) Embed(ctx context.Context, text string) ([]float64, error) {
 	if e.cfg.BaseURL == "" {
-		return nil, fmt.Errorf("embedding base URL not configured")
+		// Delegate to framework default (uses OPENAI_API_KEY env var or defaults).
 	}
-
-	type embedReq struct {
-		Input string `json:"input"`
-		Model string `json:"model"`
-	}
-	type embedData struct {
-		Embedding []float32 `json:"embedding"`
-	}
-	type embedResp struct {
-		Data  []embedData `json:"data"`
-		Error *struct {
-			Message string `json:"message"`
-		} `json:"error,omitempty"`
-	}
-
-	reqBody := embedReq{
-		Input: text,
-		Model: e.cfg.Model,
-	}
-	payload, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshal: %w", err)
-	}
-
-	url := e.cfg.BaseURL + "/embeddings"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("new request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if e.cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+e.cfg.APIKey)
-	}
-
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("do: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("embedding http %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	var result embedResp
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
-	}
-	if result.Error != nil {
-		return nil, fmt.Errorf("embedding api error: %s", result.Error.Message)
-	}
-	if len(result.Data) == 0 {
-		return nil, fmt.Errorf("no embedding returned")
-	}
-
-	return result.Data[0].Embedding, nil
+	return e.embedder.GetEmbedding(ctx, text)
 }
 
-// EmbedBatch generates embeddings for multiple texts in a single API call.
-func (e *EmbeddingModel) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
-	if e.cfg.BaseURL == "" {
-		return nil, fmt.Errorf("embedding base URL not configured")
-	}
+// EmbedBatch generates embeddings for multiple texts by issuing individual
+// calls. The framework openaiembed currently does not expose a batch endpoint,
+// but we iterate to preserve the existing batch API surface.
+func (e *EmbeddingModel) EmbedBatch(ctx context.Context, texts []string) ([][]float64, error) {
 	if len(texts) == 0 {
 		return nil, nil
 	}
-
-	type embedReq struct {
-		Input []string `json:"input"`
-		Model string   `json:"model"`
-	}
-	type embedData struct {
-		Embedding []float32 `json:"embedding"`
-	}
-	type embedResp struct {
-		Data  []embedData `json:"data"`
-		Error *struct {
-			Message string `json:"message"`
-		} `json:"error,omitempty"`
-	}
-
-	reqBody := embedReq{Input: texts, Model: e.cfg.Model}
-	payload, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("marshal: %w", err)
-	}
-
-	url := e.cfg.BaseURL + "/embeddings"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("new request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if e.cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+e.cfg.APIKey)
-	}
-
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("do: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("embedding http %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	var result embedResp
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
-	}
-	if result.Error != nil {
-		return nil, fmt.Errorf("embedding api error: %s", result.Error.Message)
-	}
-
-	vecs := make([][]float32, len(result.Data))
-	for i, d := range result.Data {
-		vecs[i] = d.Embedding
+	vecs := make([][]float64, 0, len(texts))
+	for _, t := range texts {
+		vec, err := e.embedder.GetEmbedding(ctx, t)
+		if err != nil {
+			return nil, err
+		}
+		vecs = append(vecs, vec)
 	}
 	return vecs, nil
 }
+
+// GetEmbedder returns the underlying framework embedder for use with
+// knowledge.New(WithEmbedder(...)).
+func (e *EmbeddingModel) GetEmbedder() *openaiembed.Embedder {
+	return e.embedder
+}
+
+// Ensure EmbeddingModel satisfies the local Embedder interface.
+// The framework embedder returns []float64 which is compatible.
+var _ Embedder = (*EmbeddingModel)(nil)

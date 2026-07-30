@@ -1,17 +1,23 @@
 package nl2sql
 
 import (
+	"context"
+	"reflect"
+
 	"github.com/phoenix-agent-go/agent/workflows/nl2sql/nodes"
-	"github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
+	nl2sqltypes "github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
+
+	"trpc.group/trpc-go/trpc-agent-go/graph"
 )
 
-// StateGraph is a simplified graph structure that holds nodes and edges.
-type StateGraph struct {
-	Nodes map[string]types.Node
-	Edges map[string]string // from node -> to node (simple linear graph)
-}
-
-// NL2SQLGraph builds the NL2SQL workflow graph.
+// NL2SQLGraph builds the NL2SQL workflow graph using the tRPC-Agent-Go
+// graph.StateGraph builder. The workflow consists of 7 nodes connected
+// sequentially:
+//
+//	intent_recognition -> evidence_recall -> schema_recall -> planner
+//	  -> sql_generate -> python_execute -> report_generate -> end
+//
+// Conditional routing at planner: if the plan was rejected, skip to end.
 type NL2SQLGraph struct{}
 
 // NewNL2SQLGraph creates a new NL2SQLGraph builder.
@@ -19,14 +25,23 @@ func NewNL2SQLGraph() *NL2SQLGraph {
 	return &NL2SQLGraph{}
 }
 
-// Build instantiates all node stubs and wires them into a StateGraph.
-func (g *NL2SQLGraph) Build() *StateGraph {
-	graph := &StateGraph{
-		Nodes: make(map[string]types.Node),
-		Edges: make(map[string]string),
-	}
+// Build instantiates all node stubs and wires them into a tRPC-Agent-Go
+// StateGraph. Returns the compiled graph ready for execution.
+func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
+	// Use the framework's message-oriented state schema.
+	schema := graph.MessagesStateSchema()
 
-	// Node stubs
+	// Add custom field for NL2SQL state.
+	schema.AddField("nl2sql_state", graph.StateField{
+		Type:    reflect.TypeOf(&nl2sqltypes.NL2SQLState{}),
+		Reducer: graph.DefaultReducer,
+		Default: func() any { return &nl2sqltypes.NL2SQLState{} },
+	})
+
+	sg := graph.NewStateGraph(schema)
+
+	// Node stubs — each implements graph.NodeFunc signature:
+	//   func(ctx context.Context, state graph.State) (any, error)
 	intentNode := &nodes.IntentRecognitionNode{}
 	evidenceNode := &nodes.EvidenceRecallNode{}
 	schemaNode := &nodes.SchemaRecallNode{}
@@ -35,23 +50,44 @@ func (g *NL2SQLGraph) Build() *StateGraph {
 	pythonExecNode := &nodes.PythonExecuteNode{}
 	reportNode := &nodes.ReportGeneratorNode{}
 
-	// Register nodes
-	graph.Nodes[intentNode.Name()] = intentNode
-	graph.Nodes[evidenceNode.Name()] = evidenceNode
-	graph.Nodes[schemaNode.Name()] = schemaNode
-	graph.Nodes[plannerNode.Name()] = plannerNode
-	graph.Nodes[sqlGenNode.Name()] = sqlGenNode
-	graph.Nodes[pythonExecNode.Name()] = pythonExecNode
-	graph.Nodes[reportNode.Name()] = reportNode
+	// Register nodes with graph.NodeFunc wrappers.
+	sg.AddNode(intentNode.Name(), intentNode.Execute)
+	sg.AddNode(evidenceNode.Name(), evidenceNode.Execute)
+	sg.AddNode(schemaNode.Name(), schemaNode.Execute)
+	sg.AddNode(plannerNode.Name(), plannerNode.Execute)
+	sg.AddNode(sqlGenNode.Name(), sqlGenNode.Execute)
+	sg.AddNode(pythonExecNode.Name(), pythonExecNode.Execute)
+	sg.AddNode(reportNode.Name(), reportNode.Execute)
 
-	// Wire edges in order
-	graph.Edges["intent_recognition"] = "evidence_recall"
-	graph.Edges["evidence_recall"] = "schema_recall"
-	graph.Edges["schema_recall"] = "planner"
-	graph.Edges["planner"] = "sql_generate"
-	graph.Edges["sql_generate"] = "python_execute"
-	graph.Edges["python_execute"] = "report_generate"
-	graph.Edges["report_generate"] = "end"
+	// Wire linear edges.
+	sg.AddEdge(intentNode.Name(), evidenceNode.Name())
+	sg.AddEdge(evidenceNode.Name(), schemaNode.Name())
+	sg.AddEdge(schemaNode.Name(), plannerNode.Name())
 
-	return graph
+	// Conditional edge from planner: go to sql_generate or end if rejected.
+	sg.AddConditionalEdges(plannerNode.Name(),
+		func(ctx context.Context, state graph.State) (string, error) {
+			nl2state, ok := state["nl2sql_state"].(*nl2sqltypes.NL2SQLState)
+			if !ok || nl2state == nil {
+				return sqlGenNode.Name(), nil
+			}
+			if nl2state.RejectedPlan {
+				return graph.End, nil
+			}
+			return sqlGenNode.Name(), nil
+		},
+		map[string]string{
+			sqlGenNode.Name(): sqlGenNode.Name(),
+			graph.End:         graph.End,
+		},
+	)
+	sg.AddEdge(sqlGenNode.Name(), pythonExecNode.Name())
+	sg.AddEdge(pythonExecNode.Name(), reportNode.Name())
+	sg.AddEdge(reportNode.Name(), graph.End)
+
+	// Set entry and finish points.
+	sg.SetEntryPoint(intentNode.Name())
+	sg.SetFinishPoint(graph.End)
+
+	return sg.Compile()
 }

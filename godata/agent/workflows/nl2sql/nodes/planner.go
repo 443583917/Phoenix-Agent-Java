@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	nl2sql "github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
+	"trpc.group/trpc-go/trpc-agent-go/graph"
 )
 
 // PlannerNode generates an execution plan for the query.
@@ -15,20 +16,23 @@ func (n *PlannerNode) Name() string {
 	return "planner"
 }
 
-// Execute creates a stub execution plan. If the plan was previously rejected,
-// the graph terminates at this node.
-func (n *PlannerNode) Execute(ctx context.Context, state *nl2sql.NL2SQLState) (*nl2sql.NodeOutput, error) {
-	if state.RejectedPlan {
-		return &nl2sql.NodeOutput{NextNode: "end"}, nil
-	}
+// Execute implements graph.NodeFunc for the tRPC-Agent-Go StateGraph.
+// If the plan was previously rejected, the conditional edge router
+// (defined in graph.go) will route to "end".
+func (n *PlannerNode) Execute(ctx context.Context, state graph.State) (any, error) {
+	nl2state := getOrCreateState(state)
 
-	state.Plan = &nl2sql.ExecutionPlan{
+	nl2state.Plan = &nl2sql.ExecutionPlan{
 		Steps: []nl2sql.PlanStep{
 			{
-				Description: fmt.Sprintf("Execute query for: %s", state.Query),
+				Description: fmt.Sprintf("Execute query for: %s", nl2state.Query),
 			},
 		},
 		Reasoning: "Stub plan - Phase 5",
 	}
-	return &nl2sql.NodeOutput{NextNode: "sql_generate"}, nil
+	nl2state.CurrentNode = n.Name()
+
+	return graph.State{
+		"nl2sql_state": nl2state,
+	}, nil
 }

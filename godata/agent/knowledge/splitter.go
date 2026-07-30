@@ -11,6 +11,18 @@ import (
 // then sentence boundaries (period + space), then word boundaries (space),
 // and finally falls back to hard character-level truncation.
 //
+// NOTE: The tRPC-Agent-Go framework provides several chunking strategies in
+// knowledge/chunking (FixedSizeSplitter, RecursiveSplitter, MarkdownSplitter,
+// JSONSplitter). Those operate on *document.Document objects and produce
+// []*document.Document, while this simpler []string-based function is kept
+// for callers that need lightweight text splitting without the document
+// abstraction. For knowledge ingestion flows, prefer using the framework's
+// chunking strategies:
+//
+//	import "trpc.group/trpc-go/trpc-agent-go/knowledge/chunking"
+//	splitter := chunking.NewFixedSizeSplitter(chunkSize, overlap)
+//	chunks, _ := splitter.Chunk(doc)
+//
 // Returns nil for empty input.
 func Split(text string, chunkSize, overlap int) []string {
 	if text == "" || chunkSize <= 0 {

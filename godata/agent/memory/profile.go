@@ -14,6 +14,11 @@ import (
 // Profile data is serialised as JSON into the ProfileData column. This
 // provides a flexible, schema-less key-value store for user preferences
 // and behavioural signals used by agents to personalise responses.
+//
+// NOTE: The tRPC-Agent-Go framework does not provide a direct equivalent
+// for user profile management. This is a business-layer concern that
+// remains backed by GORM + PostgreSQL. The framework's memory.Service
+// handles fact/episode memories, not structured user preference profiles.
 type UserProfile struct {
 	db *gorm.DB
 }
