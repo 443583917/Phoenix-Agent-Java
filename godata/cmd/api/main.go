@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/casbin/casbin/v2"
+	"github.com/phoenix-agent-go/agent/runner"
+	"github.com/phoenix-agent-go/agent/runtime"
 	"github.com/phoenix-agent-go/api"
 	infraCache "github.com/phoenix-agent-go/infra/cache"
 	"github.com/phoenix-agent-go/infra/config"
@@ -86,8 +88,12 @@ func main() {
 		zap.L().Warn("database unavailable, privilege and platform endpoints will return errors")
 	}
 
+	// 初始化 Agent 框架
+	agentManager := initAgentManager(cfg)
+	hitlHandler := runner.NewHitlHandler()
+
 	// 设置路由
-	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc)
+	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc, agentManager, hitlHandler)
 
 	// 启动服务
 	srv := &http.Server{
@@ -119,6 +125,33 @@ func main() {
 	}
 
 	zap.L().Info("server stopped")
+}
+
+// initAgentManager creates and configures the AgentManager with a default agent.
+func initAgentManager(cfg *config.AppConfig) *runtime.AgentManager {
+	registry := runtime.NewAgentRegistry()
+
+	// Register a default agent from config.
+	defaultAgent := &runtime.AgentConfig{
+		SN:          "default",
+		ModelName:   cfg.Agent.Model.Model,
+		BaseURL:     cfg.Agent.Model.BaseURL,
+		APIKey:      cfg.Agent.Model.APIKey,
+		Stream:      cfg.Agent.Stream,
+		MaxTokens:   cfg.Agent.MaxTokens,
+		Temperature: cfg.Agent.Temperature,
+		AgentType:   "react",
+	}
+	registry.Register(defaultAgent)
+
+	zap.L().Info("agent manager initialized",
+		zap.String("model", defaultAgent.ModelName),
+		zap.String("base_url", defaultAgent.BaseURL),
+		zap.Int("max_tokens", defaultAgent.MaxTokens),
+		zap.Float64("temperature", defaultAgent.Temperature),
+	)
+
+	return runtime.NewAgentManager(registry)
 }
 
 // initDB attempts to connect to PostgreSQL. If the connection fails, it logs
@@ -217,4 +250,3 @@ func buildPrivilegeService(database *gorm.DB, cfg *config.AppConfig) *service.Pr
 	// Initialize service
 	return service.NewPrivilegeService(uc)
 }
-

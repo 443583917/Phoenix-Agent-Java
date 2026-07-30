@@ -5,6 +5,9 @@ import (
 
 	"github.com/casbin/casbin/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/phoenix-agent-go/agent/runner"
+	"github.com/phoenix-agent-go/agent/runtime"
+	"github.com/phoenix-agent-go/api/handler/agent"
 	"github.com/phoenix-agent-go/api/handler/common"
 	"github.com/phoenix-agent-go/api/handler/platform"
 	"github.com/phoenix-agent-go/api/handler/privilege"
@@ -15,7 +18,7 @@ import (
 	"github.com/phoenix-agent-go/internal/service"
 )
 
-func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService) *gin.Engine {
+func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService, agentManager *runtime.AgentManager, hitlHandler *runner.HitlHandler) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -131,7 +134,6 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			departmentGroup.GET("/code/:code", departmentHandler.GetByCode)
 			departmentGroup.POST("", departmentHandler.Create)
 			departmentGroup.PUT("", departmentHandler.Update)
-			departmentGroup.DELETE("/:id", departmentHandler.Delete)
 			departmentGroup.POST("/sync", departmentHandler.Sync)
 			departmentGroup.POST("/sync-children/:deptId", departmentHandler.SyncChildren)
 		}
@@ -196,10 +198,25 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			loginLogGroup.POST("", loginLogHandler.Create)
 			loginLogGroup.DELETE("/:id", loginLogHandler.Delete)
 		}
+	}
 
-		// Phase 4: agentGroup := api.Group("/agent")
-		// Phase 5: datasourceGroup := api.Group("/datasource")
-		// Phase 5: chatGroup := api.Group("")
+	// Agent 路由（需 JWT）
+	admin := r.Group("/api/admin")
+	admin.Use(middleware.Auth(jwtManager))
+	{
+		reactAgentHandler := agent.NewReactAgentHandler(agentManager)
+		agentGroup := admin.Group("/agent")
+		{
+			agentGroup.POST("/chat", reactAgentHandler.Chat)
+			agentGroup.GET("/stream/chatsql", reactAgentHandler.StreamChatSQL)
+		}
+
+		harnessHandler := agent.NewHarnessHandler(agentManager, hitlHandler)
+		harnessGroup := admin.Group("/harness")
+		{
+			harnessGroup.POST("/chat", harnessHandler.Chat)
+			harnessGroup.POST("/confirm", harnessHandler.Confirm)
+		}
 	}
 
 	// 平台认证路由（仅 updatePassword 需要 JWT）
