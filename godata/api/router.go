@@ -5,13 +5,15 @@ import (
 
 	"github.com/casbin/casbin/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/phoenix-agent-go/api/handler/privilege"
 	"github.com/phoenix-agent-go/api/middleware"
 	"github.com/phoenix-agent-go/infra/config"
 	"github.com/phoenix-agent-go/infra/jwt"
 	"github.com/phoenix-agent-go/infra/response"
+	"github.com/phoenix-agent-go/internal/service"
 )
 
-func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer) *gin.Engine {
+func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -33,14 +35,14 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 	r.Static("/api/upload", "./storage/upload")
 
 	// 认证路由（无需 JWT）
-	{
-		auth := r.Group("/api/privilege/auth")
-		auth.Use(middleware.RateLimit())
-		// Phase 2: auth.POST("/login", handler.Login)
-		// Phase 2: auth.POST("/logout", handler.Logout)
-		// Phase 2: auth.GET("/captcha", handler.Captcha)
-		_ = auth
-	}
+	authHandler := privilege.NewAuthHandler(privilegeSvc, jwtManager)
+	auth := r.Group("/api/privilege/auth")
+	auth.Use(middleware.RateLimit())
+	auth.GET("/captcha", authHandler.Captcha)
+	auth.POST("/login", authHandler.Login)
+	auth.POST("/logout", authHandler.Logout)
+	auth.GET("/menus", middleware.Auth(jwtManager), authHandler.Menus)
+	auth.GET("/getLoginUserInfo", middleware.Auth(jwtManager), authHandler.GetLoginUserInfo)
 
 	// API 路由（需 JWT）
 	api := r.Group("/api")

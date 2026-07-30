@@ -66,7 +66,7 @@ func main() {
 	defer enforcer.EnableEnforce(false)
 
 	// 设置路由
-	router := api.SetupRouter(cfg, jwtManager, enforcer)
+	router := api.SetupRouter(cfg, jwtManager, enforcer, nil) // TODO: inject privilegeSvc when dependency chain is initialized
 
 	// 启动服务
 	srv := &http.Server{
