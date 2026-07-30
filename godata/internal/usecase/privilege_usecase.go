@@ -504,6 +504,122 @@ func (u *PrivilegeUsecase) BatchDeleteUserRoles(ctx context.Context, dto model.U
 
 // ──────────────────────────── Module / ACL ────────────────────────────
 
+// PageModules returns a paginated list of modules sorted by sort order.
+func (u *PrivilegeUsecase) PageModules(ctx context.Context, page, size int, name, code, systemID string) ([]*model.PrivilegeModule, int64, error) {
+	all, err := u.moduleRepo.FindAll(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Filter in memory.
+	var filtered []*model.PrivilegeModule
+	for _, m := range all {
+		if name != "" && m.Name != name {
+			continue
+		}
+		if code != "" && m.Code != code {
+			continue
+		}
+		if systemID != "" && m.SystemID != systemID {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+
+	total := int64(len(filtered))
+
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 20
+	}
+	offset := (page - 1) * size
+	if offset >= len(filtered) {
+		return nil, total, nil
+	}
+	end := offset + size
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
+	return filtered[offset:end], total, nil
+}
+
+// GetModuleByID returns a single module by primary key.
+func (u *PrivilegeUsecase) GetModuleByID(ctx context.Context, id string) (*model.PrivilegeModule, error) {
+	m, err := u.moduleRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, &AppError{Code: 408001, Msg: "模块不存在"}
+	}
+	return m, nil
+}
+
+// GetModulesBySystemID returns all modules for the given system.
+func (u *PrivilegeUsecase) GetModulesBySystemID(ctx context.Context, systemID string) ([]*model.PrivilegeModule, error) {
+	return u.moduleRepo.FindBySystemID(ctx, systemID)
+}
+
+// GetModulesByPID returns all modules with the given parent ID.
+func (u *PrivilegeUsecase) GetModulesByPID(ctx context.Context, pid string) ([]*model.PrivilegeModule, error) {
+	return u.moduleRepo.FindByPID(ctx, pid)
+}
+
+// CreateModule creates a new module from a DTO.
+func (u *PrivilegeUsecase) CreateModule(ctx context.Context, dto model.PrivilegeModuleDTO) (*model.PrivilegeModule, error) {
+	module := &model.PrivilegeModule{
+		BaseModel: model.BaseModel{ID: genID()},
+		Name:      dto.Name,
+		Code:      dto.Code,
+		URL:       dto.URL,
+		Icon:      dto.Icon,
+		Sort:      dto.Sort,
+		SystemID:  dto.SystemID,
+		Type:      dto.Type,
+	}
+	if dto.PID != "" {
+		module.PID = &dto.PID
+	}
+	if err := u.moduleRepo.Create(ctx, module); err != nil {
+		return nil, err
+	}
+	return module, nil
+}
+
+// UpdateModule updates an existing module identified by its ID.
+func (u *PrivilegeUsecase) UpdateModule(ctx context.Context, dto model.PrivilegeModuleDTO, id string) error {
+	existing, err := u.moduleRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return &AppError{Code: 408001, Msg: "模块不存在"}
+	}
+
+	existing.Name = dto.Name
+	existing.Code = dto.Code
+	existing.URL = dto.URL
+	existing.Icon = dto.Icon
+	existing.Sort = dto.Sort
+	existing.SystemID = dto.SystemID
+	existing.Type = dto.Type
+	if dto.PID != "" {
+		existing.PID = &dto.PID
+	} else {
+		existing.PID = nil
+	}
+
+	return u.moduleRepo.Update(ctx, existing)
+}
+
+// GetModuleTreeWithACL returns the module tree decorated with ACL info.
+func (u *PrivilegeUsecase) GetModuleTreeWithACL(ctx context.Context) ([]*model.ModuleTreeVO, error) {
+	return u.GetModuleTree(ctx)
+}
+
 // GetModuleTree returns the full module tree sorted by sort order.
 func (u *PrivilegeUsecase) GetModuleTree(ctx context.Context) ([]*model.ModuleTreeVO, error) {
 	return u.moduleRepo.Tree(ctx)
@@ -536,7 +652,136 @@ func (u *PrivilegeUsecase) SaveModuleACL(ctx context.Context, dto model.Privileg
 	return u.aclRepo.SaveModule(ctx, acl)
 }
 
+// PageACLs returns a paginated list of ACLs.
+func (u *PrivilegeUsecase) PageACLs(ctx context.Context, page, size int) ([]*model.PrivilegeAcl, int64, error) {
+	all, err := u.aclRepo.FindAll(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := int64(len(all))
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 20
+	}
+	offset := (page - 1) * size
+	if offset >= len(all) {
+		return nil, total, nil
+	}
+	end := offset + size
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end], total, nil
+}
+
+// GetACLByID returns a single ACL by primary key.
+func (u *PrivilegeUsecase) GetACLByID(ctx context.Context, id string) (*model.PrivilegeAcl, error) {
+	acl, err := u.aclRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if acl == nil {
+		return nil, &AppError{Code: 409001, Msg: "ACL不存在"}
+	}
+	return acl, nil
+}
+
+// GetACLsByReleaseID returns all ACLs for the given release.
+func (u *PrivilegeUsecase) GetACLsByReleaseID(ctx context.Context, releaseID string) ([]*model.PrivilegeAcl, error) {
+	return u.aclRepo.FindByReleaseID(ctx, releaseID)
+}
+
+// GetACLsByReleaseIDAndModuleID returns ACLs for the given release and module.
+func (u *PrivilegeUsecase) GetACLsByReleaseIDAndModuleID(ctx context.Context, releaseID, moduleID string) ([]*model.PrivilegeAcl, error) {
+	all, err := u.aclRepo.FindByReleaseID(ctx, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	var filtered []*model.PrivilegeAcl
+	for _, acl := range all {
+		if acl.ModuleID == moduleID {
+			filtered = append(filtered, acl)
+		}
+	}
+	return filtered, nil
+}
+
+// UpdateACL updates an existing ACL.
+func (u *PrivilegeUsecase) UpdateACL(ctx context.Context, dto model.PrivilegeAclDTO, id string) error {
+	existing, err := u.aclRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return &AppError{Code: 409001, Msg: "ACL不存在"}
+	}
+
+	existing.RoleID = dto.RoleID
+	existing.ModuleID = dto.ModuleID
+	existing.Permission = dto.Permission
+	existing.ReleaseID = dto.ReleaseID
+
+	return u.aclRepo.Update(ctx, existing)
+}
+
+// DeleteACL soft-deletes an ACL.
+func (u *PrivilegeUsecase) DeleteACL(ctx context.Context, id string) error {
+	return u.aclRepo.Delete(ctx, id)
+}
+
+// SaveAllACLs replaces all ACL entries for the given release with the given check status.
+func (u *PrivilegeUsecase) SaveAllACLs(ctx context.Context, dtos []model.PrivilegeAclDTO, releaseID string, checkStatus int) error {
+	acls := make([]*model.PrivilegeAcl, 0, len(dtos))
+	for _, d := range dtos {
+		acls = append(acls, &model.PrivilegeAcl{
+			BaseModel:   model.BaseModel{ID: genID()},
+			RoleID:      d.RoleID,
+			ModuleID:    d.ModuleID,
+			Permission:  d.Permission,
+			ReleaseID:   releaseID,
+			CheckStatus: checkStatus,
+		})
+	}
+	return u.aclRepo.SaveAll(ctx, acls)
+}
+
 // ──────────────────────────── Department ────────────────────────────
+
+// GetDepartmentByID returns a single department by primary key.
+func (u *PrivilegeUsecase) GetDepartmentByID(ctx context.Context, id string) (*model.PrivilegeDepartment, error) {
+	dept, err := u.deptRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if dept == nil {
+		return nil, ErrDeptNotFound
+	}
+	return dept, nil
+}
+
+// GetDepartmentsByPID returns all departments with the given parent ID.
+func (u *PrivilegeUsecase) GetDepartmentsByPID(ctx context.Context, pid string) ([]*model.PrivilegeDepartment, error) {
+	return u.deptRepo.FindByPID(ctx, pid)
+}
+
+// GetDepartmentsByCompanyID returns all departments for a company.
+func (u *PrivilegeUsecase) GetDepartmentsByCompanyID(ctx context.Context, companyID string) ([]*model.PrivilegeDepartment, error) {
+	return u.deptRepo.FindByCompanyID(ctx, companyID)
+}
+
+// GetDepartmentByCode returns a single department by its code.
+func (u *PrivilegeUsecase) GetDepartmentByCode(ctx context.Context, code string) (*model.PrivilegeDepartment, error) {
+	dept, err := u.deptRepo.FindByCode(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	if dept == nil {
+		return nil, ErrDeptNotFound
+	}
+	return dept, nil
+}
 
 // CreateDepartment creates a new department.
 func (u *PrivilegeUsecase) CreateDepartment(ctx context.Context, dto model.PrivilegeDepartmentDTO) (*model.PrivilegeDepartment, error) {
@@ -599,6 +844,30 @@ func (u *PrivilegeUsecase) PageDepartments(ctx context.Context, page, size int, 
 }
 
 // ──────────────────────────── Company ────────────────────────────
+
+// GetCompanyByID returns a single company by primary key.
+func (u *PrivilegeUsecase) GetCompanyByID(ctx context.Context, id string) (*model.PrivilegeCompany, error) {
+	company, err := u.companyRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if company == nil {
+		return nil, ErrCompanyNotFound
+	}
+	return company, nil
+}
+
+// GetCompanyByCode returns a single company by its code.
+func (u *PrivilegeUsecase) GetCompanyByCode(ctx context.Context, code string) (*model.PrivilegeCompany, error) {
+	company, err := u.companyRepo.FindByCode(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	if company == nil {
+		return nil, ErrCompanyNotFound
+	}
+	return company, nil
+}
 
 // CreateCompany creates a new company.
 func (u *PrivilegeUsecase) CreateCompany(ctx context.Context, dto model.PrivilegeCompanyDTO) (*model.PrivilegeCompany, error) {

@@ -152,9 +152,64 @@ func (s *PrivilegeService) BatchDeleteUserRoles(ctx context.Context, dto model.U
 
 // ──────────────────────────── Module / ACL ────────────────────────────
 
+// PageModules returns a paginated list of modules.
+func (s *PrivilegeService) PageModules(ctx context.Context, page, size int, name, code, systemID string) ([]*model.PrivilegeModule, int64, error) {
+	return s.uc.PageModules(ctx, page, size, name, code, systemID)
+}
+
+// GetModuleByID returns a single module by its primary key.
+func (s *PrivilegeService) GetModuleByID(ctx context.Context, id string) (*model.PrivilegeModule, error) {
+	return s.uc.GetModuleByID(ctx, id)
+}
+
+// GetModulesBySystemID returns all modules for a system.
+func (s *PrivilegeService) GetModulesBySystemID(ctx context.Context, systemID string) ([]*model.PrivilegeModule, error) {
+	return s.uc.GetModulesBySystemID(ctx, systemID)
+}
+
+// GetModulesByPID returns all modules with the given parent ID.
+func (s *PrivilegeService) GetModulesByPID(ctx context.Context, pid string) ([]*model.PrivilegeModule, error) {
+	return s.uc.GetModulesByPID(ctx, pid)
+}
+
+// CreateModule creates a new module.
+func (s *PrivilegeService) CreateModule(ctx context.Context, dto model.PrivilegeModuleDTO) (*model.PrivilegeModule, error) {
+	return s.uc.CreateModule(ctx, dto)
+}
+
+// UpdateModule updates an existing module.
+func (s *PrivilegeService) UpdateModule(ctx context.Context, dto model.PrivilegeModuleDTO, id string) error {
+	return s.uc.UpdateModule(ctx, dto, id)
+}
+
 // GetModuleTree returns the full module tree.
 func (s *PrivilegeService) GetModuleTree(ctx context.Context) ([]*model.ModuleTreeVO, error) {
 	return s.uc.GetModuleTree(ctx)
+}
+
+// GetModuleTreeWithACL returns the module tree with ACL info.
+func (s *PrivilegeService) GetModuleTreeWithACL(ctx context.Context) ([]*model.ModuleTreeVO, error) {
+	return s.uc.GetModuleTreeWithACL(ctx)
+}
+
+// PageACLs returns a paginated list of ACLs.
+func (s *PrivilegeService) PageACLs(ctx context.Context, page, size int) ([]*model.PrivilegeAcl, int64, error) {
+	return s.uc.PageACLs(ctx, page, size)
+}
+
+// GetACLByID returns a single ACL by its primary key.
+func (s *PrivilegeService) GetACLByID(ctx context.Context, id string) (*model.PrivilegeAcl, error) {
+	return s.uc.GetACLByID(ctx, id)
+}
+
+// GetACLsByReleaseID returns all ACLs for a release.
+func (s *PrivilegeService) GetACLsByReleaseID(ctx context.Context, releaseID string) ([]*model.PrivilegeAcl, error) {
+	return s.uc.GetACLsByReleaseID(ctx, releaseID)
+}
+
+// GetACLsByReleaseIDAndModuleID returns ACLs for a release and module.
+func (s *PrivilegeService) GetACLsByReleaseIDAndModuleID(ctx context.Context, releaseID, moduleID string) ([]*model.PrivilegeAcl, error) {
+	return s.uc.GetACLsByReleaseIDAndModuleID(ctx, releaseID, moduleID)
 }
 
 // SaveACLs replaces all ACL entries for a role.
@@ -162,9 +217,24 @@ func (s *PrivilegeService) SaveACLs(ctx context.Context, dtos []model.PrivilegeA
 	return s.uc.SaveACLs(ctx, dtos)
 }
 
+// SaveAllACLs replaces all ACL entries for the given release with the given check status.
+func (s *PrivilegeService) SaveAllACLs(ctx context.Context, dtos []model.PrivilegeAclDTO, releaseID string, checkStatus int) error {
+	return s.uc.SaveAllACLs(ctx, dtos, releaseID, checkStatus)
+}
+
 // SaveModuleACL saves a single ACL module entry.
 func (s *PrivilegeService) SaveModuleACL(ctx context.Context, dto model.PrivilegeAclDTO) error {
 	return s.uc.SaveModuleACL(ctx, dto)
+}
+
+// UpdateACL updates an existing ACL.
+func (s *PrivilegeService) UpdateACL(ctx context.Context, dto model.PrivilegeAclDTO, id string) error {
+	return s.uc.UpdateACL(ctx, dto, id)
+}
+
+// DeleteACL soft-deletes an ACL.
+func (s *PrivilegeService) DeleteACL(ctx context.Context, id string) error {
+	return s.uc.DeleteACL(ctx, id)
 }
 
 // ──────────────────────────── Department ────────────────────────────
@@ -177,6 +247,26 @@ func (s *PrivilegeService) CreateDepartment(ctx context.Context, dto model.Privi
 // UpdateDepartment updates an existing department.
 func (s *PrivilegeService) UpdateDepartment(ctx context.Context, dto model.PrivilegeDepartmentDTO, id string) error {
 	return s.uc.UpdateDepartment(ctx, dto, id)
+}
+
+// GetDepartmentByID returns a single department by its primary key.
+func (s *PrivilegeService) GetDepartmentByID(ctx context.Context, id string) (*model.PrivilegeDepartment, error) {
+	return s.uc.GetDepartmentByID(ctx, id)
+}
+
+// GetDepartmentsByPID returns departments with the given parent ID.
+func (s *PrivilegeService) GetDepartmentsByPID(ctx context.Context, pid string) ([]*model.PrivilegeDepartment, error) {
+	return s.uc.GetDepartmentsByPID(ctx, pid)
+}
+
+// GetDepartmentsByCompanyID returns all departments for a company.
+func (s *PrivilegeService) GetDepartmentsByCompanyID(ctx context.Context, companyID string) ([]*model.PrivilegeDepartment, error) {
+	return s.uc.GetDepartmentsByCompanyID(ctx, companyID)
+}
+
+// GetDepartmentByCode returns a single department by its code.
+func (s *PrivilegeService) GetDepartmentByCode(ctx context.Context, code string) (*model.PrivilegeDepartment, error) {
+	return s.uc.GetDepartmentByCode(ctx, code)
 }
 
 // DeleteDepartment soft-deletes a department.
@@ -199,6 +289,16 @@ func (s *PrivilegeService) CreateCompany(ctx context.Context, dto model.Privileg
 // UpdateCompany updates an existing company.
 func (s *PrivilegeService) UpdateCompany(ctx context.Context, dto model.PrivilegeCompanyDTO, id string) error {
 	return s.uc.UpdateCompany(ctx, dto, id)
+}
+
+// GetCompanyByID returns a single company by its primary key.
+func (s *PrivilegeService) GetCompanyByID(ctx context.Context, id string) (*model.PrivilegeCompany, error) {
+	return s.uc.GetCompanyByID(ctx, id)
+}
+
+// GetCompanyByCode returns a single company by its code.
+func (s *PrivilegeService) GetCompanyByCode(ctx context.Context, code string) (*model.PrivilegeCompany, error) {
+	return s.uc.GetCompanyByCode(ctx, code)
 }
 
 // DeleteCompany soft-deletes a company.

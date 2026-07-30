@@ -35,6 +35,7 @@ type UserRoleRepository interface {
 type ModuleRepository interface {
 	FindByID(ctx context.Context, id string) (*model.PrivilegeModule, error)
 	FindByPID(ctx context.Context, pid string) ([]*model.PrivilegeModule, error)
+	FindBySystemID(ctx context.Context, systemID string) ([]*model.PrivilegeModule, error)
 	FindAll(ctx context.Context) ([]*model.PrivilegeModule, error)
 	Tree(ctx context.Context) ([]*model.ModuleTreeVO, error)
 	Create(ctx context.Context, module *model.PrivilegeModule) error
@@ -42,16 +43,21 @@ type ModuleRepository interface {
 }
 
 type ACLRepository interface {
+	FindByID(ctx context.Context, id string) (*model.PrivilegeAcl, error)
 	FindByRoleID(ctx context.Context, roleID string) ([]*model.PrivilegeAcl, error)
+	FindByReleaseID(ctx context.Context, releaseID string) ([]*model.PrivilegeAcl, error)
+	FindAll(ctx context.Context) ([]*model.PrivilegeAcl, error)
 	SaveAll(ctx context.Context, acls []*model.PrivilegeAcl) error
 	SaveModule(ctx context.Context, acl *model.PrivilegeAcl) error
-	FindByReleaseID(ctx context.Context, releaseID string) ([]*model.PrivilegeAcl, error)
+	Update(ctx context.Context, acl *model.PrivilegeAcl) error
+	Delete(ctx context.Context, id string) error
 }
 
 type DepartmentRepository interface {
 	FindByID(ctx context.Context, id string) (*model.PrivilegeDepartment, error)
 	FindByPID(ctx context.Context, pid string) ([]*model.PrivilegeDepartment, error)
 	FindByCompanyID(ctx context.Context, companyID string) ([]*model.PrivilegeDepartment, error)
+	FindByCode(ctx context.Context, code string) (*model.PrivilegeDepartment, error)
 	OrgTree(ctx context.Context) ([]*model.OrganizationTreeVO, error)
 	Page(ctx context.Context, page, size int, dept *model.PrivilegeDepartment) ([]*model.PrivilegeDepartment, int64, error)
 	Create(ctx context.Context, dept *model.PrivilegeDepartment) error

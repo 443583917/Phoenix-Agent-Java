@@ -88,6 +88,64 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			userRoleGroup.DELETE("/batch-remove", userRoleHandler.BatchRemove)
 		}
 
+		// 模块管理
+		moduleHandler := privilege.NewModuleHandler(privilegeSvc)
+		moduleGroup := api.Group("/privilege/module")
+		{
+			moduleGroup.GET("/page", moduleHandler.Page)
+			moduleGroup.GET("/tree", moduleHandler.Tree)
+			moduleGroup.GET("/tree/acl", moduleHandler.TreeWithACL)
+			moduleGroup.GET("/:id", moduleHandler.GetByID)
+			moduleGroup.GET("/system/:systemId", moduleHandler.GetBySystem)
+			moduleGroup.GET("/pid/:pid", moduleHandler.GetByPID)
+			moduleGroup.POST("", moduleHandler.Create)
+			moduleGroup.PUT("", moduleHandler.Update)
+		}
+
+		// ACL 管理
+		aclHandler := privilege.NewACLHandler(privilegeSvc)
+		aclGroup := api.Group("/privilege/acl")
+		{
+			aclGroup.GET("/page", aclHandler.Page)
+			aclGroup.GET("/:id", aclHandler.GetByID)
+			aclGroup.GET("/release/:releaseId", aclHandler.GetByRelease)
+			aclGroup.GET("/release/module/:releaseId/:moduleId", aclHandler.GetByReleaseAndModule)
+			aclGroup.PUT("", aclHandler.Update)
+			aclGroup.DELETE("/:id", aclHandler.Delete)
+			aclGroup.POST("/saveAll/:releaseId/:checkStatus", aclHandler.SaveAll)
+			aclGroup.POST("/saveModule", aclHandler.SaveModule)
+		}
+
+		// 部门管理
+		departmentHandler := privilege.NewDepartmentHandler(privilegeSvc)
+		departmentGroup := api.Group("/privilege/department")
+		{
+			departmentGroup.GET("/orgTree", departmentHandler.OrgTree)
+			departmentGroup.GET("/page", departmentHandler.Page)
+			departmentGroup.GET("/tree", departmentHandler.Tree)
+			departmentGroup.GET("/:id", departmentHandler.GetByID)
+			departmentGroup.GET("/pid/:pid", departmentHandler.GetByPID)
+			departmentGroup.GET("/company/:companyId", departmentHandler.GetByCompany)
+			departmentGroup.GET("/code/:code", departmentHandler.GetByCode)
+			departmentGroup.POST("", departmentHandler.Create)
+			departmentGroup.PUT("", departmentHandler.Update)
+			departmentGroup.DELETE("/:id", departmentHandler.Delete)
+			departmentGroup.POST("/sync", departmentHandler.Sync)
+			departmentGroup.POST("/sync-children/:deptId", departmentHandler.SyncChildren)
+		}
+
+		// 公司管理
+		companyHandler := privilege.NewCompanyHandler(privilegeSvc)
+		companyGroup := api.Group("/privilege/company")
+		{
+			companyGroup.POST("/page", companyHandler.Page)
+			companyGroup.GET("/:id", companyHandler.GetByID)
+			companyGroup.GET("/code/:code", companyHandler.GetByCode)
+			companyGroup.POST("", companyHandler.Create)
+			companyGroup.PUT("", companyHandler.Update)
+			companyGroup.DELETE("/:id", companyHandler.Delete)
+		}
+
 		// Phase 4: agentGroup := api.Group("/agent")
 		// Phase 5: datasourceGroup := api.Group("/datasource")
 		// Phase 5: chatGroup := api.Group("")

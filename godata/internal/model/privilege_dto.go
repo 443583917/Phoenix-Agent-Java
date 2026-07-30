@@ -73,6 +73,7 @@ type UserRoleBatchDTO struct {
 
 // PrivilegeModuleDTO — 菜单/模块创建/更新请求
 type PrivilegeModuleDTO struct {
+	ID       string `json:"id"`
 	Name     string `json:"name" binding:"required"`
 	Code     string `json:"code"`
 	PID      string `json:"pid"`
@@ -85,6 +86,7 @@ type PrivilegeModuleDTO struct {
 
 // PrivilegeAclDTO — 访问控制列表请求
 type PrivilegeAclDTO struct {
+	ID         string `json:"id"`
 	RoleID     string `json:"roleId"`
 	ModuleID   string `json:"moduleId"`
 	Permission string `json:"permission"`
@@ -93,6 +95,7 @@ type PrivilegeAclDTO struct {
 
 // PrivilegeDepartmentDTO — 部门创建/更新请求
 type PrivilegeDepartmentDTO struct {
+	ID        string `json:"id"`
 	Name      string `json:"name" binding:"required"`
 	Code      string `json:"code"`
 	PID       string `json:"pid"`
@@ -102,6 +105,7 @@ type PrivilegeDepartmentDTO struct {
 
 // PrivilegeCompanyDTO — 公司创建/更新请求
 type PrivilegeCompanyDTO struct {
+	ID      string `json:"id"`
 	CName   string `json:"cname" binding:"required"`
 	EName   string `json:"ename"`
 	Code    string `json:"code"`

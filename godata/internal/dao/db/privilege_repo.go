@@ -230,6 +230,12 @@ func (r *moduleRepo) FindByPID(ctx context.Context, pid string) ([]*model.Privil
 	return list, err
 }
 
+func (r *moduleRepo) FindBySystemID(ctx context.Context, systemID string) ([]*model.PrivilegeModule, error) {
+	var list []*model.PrivilegeModule
+	err := r.db.WithContext(ctx).Where("system_id = ? AND del_flag = 0", systemID).Order("sort ASC").Find(&list).Error
+	return list, err
+}
+
 func (r *moduleRepo) FindAll(ctx context.Context) ([]*model.PrivilegeModule, error) {
 	var list []*model.PrivilegeModule
 	err := r.db.WithContext(ctx).Where("del_flag = 0").Order("sort ASC").Find(&list).Error
@@ -279,9 +285,24 @@ func NewACLRepository(db *gorm.DB) repository.ACLRepository {
 	return &aclRepo{db}
 }
 
+func (r *aclRepo) FindByID(ctx context.Context, id string) (*model.PrivilegeAcl, error) {
+	var acl model.PrivilegeAcl
+	err := r.db.WithContext(ctx).Where("id = ? AND del_flag = 0", id).First(&acl).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &acl, err
+}
+
 func (r *aclRepo) FindByRoleID(ctx context.Context, roleID string) ([]*model.PrivilegeAcl, error) {
 	var list []*model.PrivilegeAcl
 	err := r.db.WithContext(ctx).Where("role_id = ? AND del_flag = 0", roleID).Find(&list).Error
+	return list, err
+}
+
+func (r *aclRepo) FindAll(ctx context.Context) ([]*model.PrivilegeAcl, error) {
+	var list []*model.PrivilegeAcl
+	err := r.db.WithContext(ctx).Where("del_flag = 0").Find(&list).Error
 	return list, err
 }
 
@@ -315,6 +336,14 @@ func (r *aclRepo) FindByReleaseID(ctx context.Context, releaseID string) ([]*mod
 	return list, err
 }
 
+func (r *aclRepo) Update(ctx context.Context, acl *model.PrivilegeAcl) error {
+	return r.db.WithContext(ctx).Model(&model.PrivilegeAcl{}).Where("id = ? AND del_flag = 0", acl.ID).Updates(acl).Error
+}
+
+func (r *aclRepo) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Model(&model.PrivilegeAcl{}).Where("id = ? AND del_flag = 0", id).Update("del_flag", 1).Error
+}
+
 // ──────────────────────────── Department ────────────────────────────
 
 type deptRepo struct{ db *gorm.DB }
@@ -342,6 +371,15 @@ func (r *deptRepo) FindByCompanyID(ctx context.Context, companyID string) ([]*mo
 	var list []*model.PrivilegeDepartment
 	err := r.db.WithContext(ctx).Where("company_id = ? AND del_flag = 0", companyID).Order("sort ASC").Find(&list).Error
 	return list, err
+}
+
+func (r *deptRepo) FindByCode(ctx context.Context, code string) (*model.PrivilegeDepartment, error) {
+	var dept model.PrivilegeDepartment
+	err := r.db.WithContext(ctx).Where("code = ? AND del_flag = 0", code).First(&dept).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &dept, err
 }
 
 func (r *deptRepo) OrgTree(ctx context.Context) ([]*model.OrganizationTreeVO, error) {
