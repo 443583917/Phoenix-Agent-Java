@@ -95,6 +95,7 @@ type DictionaryRepository interface {
 
 type PvalueRepository interface {
 	FindByID(ctx context.Context, id string) (*model.PrivilegePvalue, error)
+	FindBySystemID(ctx context.Context, systemID string) ([]*model.PrivilegePvalue, error)
 	Page(ctx context.Context, query model.PrivilegePvalueQuery) ([]*model.PrivilegePvalue, int64, error)
 	Create(ctx context.Context, pv *model.PrivilegePvalue) error
 	Update(ctx context.Context, pv *model.PrivilegePvalue) error
@@ -102,6 +103,8 @@ type PvalueRepository interface {
 }
 
 type LoginLogRepository interface {
+	FindByID(ctx context.Context, id string) (*model.PrivilegeLoginLog, error)
 	Create(ctx context.Context, log *model.PrivilegeLoginLog) error
 	Page(ctx context.Context, page, size int) ([]*model.PrivilegeLoginLog, int64, error)
+	Delete(ctx context.Context, id string) error
 }

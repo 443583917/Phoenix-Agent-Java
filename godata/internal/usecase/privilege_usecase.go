@@ -965,6 +965,30 @@ func (u *PrivilegeUsecase) PageEmployees(ctx context.Context, page, size int) ([
 	return vos, total, nil
 }
 
+// GetEmployeeByID returns a single employee binding by its primary key.
+func (u *PrivilegeUsecase) GetEmployeeByID(ctx context.Context, id string) (*model.PrivilegeEmployeeVO, error) {
+	emp, err := u.employeeRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if emp == nil {
+		return nil, &AppError{Code: 405001, Msg: "员工不存在"}
+	}
+	return employeeToVO(emp), nil
+}
+
+// GetEmployeeByEmpCode returns a single employee binding by its employee code.
+func (u *PrivilegeUsecase) GetEmployeeByEmpCode(ctx context.Context, empCode string) (*model.PrivilegeEmployeeVO, error) {
+	emp, err := u.employeeRepo.FindByEmpCode(ctx, empCode)
+	if err != nil {
+		return nil, err
+	}
+	if emp == nil {
+		return nil, &AppError{Code: 405001, Msg: "员工不存在"}
+	}
+	return employeeToVO(emp), nil
+}
+
 // ──────────────────────────── Dictionary ────────────────────────────
 
 // CreateDictionary creates a new dictionary entry.
@@ -1019,6 +1043,28 @@ func (u *PrivilegeUsecase) PageDictionaries(ctx context.Context, page, size int)
 	return u.dictRepo.Page(ctx, page, size)
 }
 
+// GetDictionaryByID returns a single dictionary entry by its primary key.
+func (u *PrivilegeUsecase) GetDictionaryByID(ctx context.Context, id string) (*model.PrivilegeDictionary, error) {
+	dict, err := u.dictRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if dict == nil {
+		return nil, &AppError{Code: 406001, Msg: "字典不存在"}
+	}
+	return dict, nil
+}
+
+// GetDictionariesBySystemSN returns all dictionary entries for the given system SN.
+func (u *PrivilegeUsecase) GetDictionariesBySystemSN(ctx context.Context, systemSN string) ([]*model.PrivilegeDictionary, error) {
+	return u.dictRepo.FindBySystemSN(ctx, systemSN)
+}
+
+// GetDictionariesByPCode returns all dictionary entries with the given parent code.
+func (u *PrivilegeUsecase) GetDictionariesByPCode(ctx context.Context, pcode string) ([]*model.PrivilegeDictionary, error) {
+	return u.dictRepo.FindByPCode(ctx, pcode)
+}
+
 // ──────────────────────────── Pvalue ────────────────────────────
 
 // CreatePvalue creates a new permission value.
@@ -1061,11 +1107,60 @@ func (u *PrivilegeUsecase) PagePvalues(ctx context.Context, query model.Privileg
 	return u.pvalueRepo.Page(ctx, query)
 }
 
+// GetPvalueByID returns a single permission value by its primary key.
+func (u *PrivilegeUsecase) GetPvalueByID(ctx context.Context, id string) (*model.PrivilegePvalue, error) {
+	pv, err := u.pvalueRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if pv == nil {
+		return nil, &AppError{Code: 407001, Msg: "权限值不存在"}
+	}
+	return pv, nil
+}
+
+// GetPvaluesBySystemID returns all permission values for the given system.
+func (u *PrivilegeUsecase) GetPvaluesBySystemID(ctx context.Context, systemID string) ([]*model.PrivilegePvalue, error) {
+	return u.pvalueRepo.FindBySystemID(ctx, systemID)
+}
+
 // ──────────────────────────── LoginLog ────────────────────────────
 
 // PageLoginLogs returns a paginated list of login logs.
 func (u *PrivilegeUsecase) PageLoginLogs(ctx context.Context, page, size int) ([]*model.PrivilegeLoginLog, int64, error) {
 	return u.loginLogRepo.Page(ctx, page, size)
+}
+
+// GetLoginLogByID returns a single login log by its primary key.
+func (u *PrivilegeUsecase) GetLoginLogByID(ctx context.Context, id string) (*model.PrivilegeLoginLog, error) {
+	log, err := u.loginLogRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if log == nil {
+		return nil, &AppError{Code: 410001, Msg: "登录日志不存在"}
+	}
+	return log, nil
+}
+
+// CreateLoginLog creates a new login log entry.
+func (u *PrivilegeUsecase) CreateLoginLog(ctx context.Context, dto model.PrivilegeLoginLogDTO) (*model.PrivilegeLoginLog, error) {
+	log := &model.PrivilegeLoginLog{
+		BaseModel: model.BaseModel{ID: genID()},
+		UserID:    dto.UserID,
+		Username:  dto.Username,
+		LoginIP:   dto.LoginIP,
+		LoginTime: time.Now(),
+	}
+	if err := u.loginLogRepo.Create(ctx, log); err != nil {
+		return nil, err
+	}
+	return log, nil
+}
+
+// DeleteLoginLog soft-deletes a login log by its ID.
+func (u *PrivilegeUsecase) DeleteLoginLog(ctx context.Context, id string) error {
+	return u.loginLogRepo.Delete(ctx, id)
 }
 
 // ──────────────────────────── Tree / Sync ────────────────────────────

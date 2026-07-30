@@ -333,6 +333,16 @@ func (s *PrivilegeService) PageEmployees(ctx context.Context, page, size int) ([
 	return s.uc.PageEmployees(ctx, page, size)
 }
 
+// GetEmployeeByID returns a single employee binding by its primary key.
+func (s *PrivilegeService) GetEmployeeByID(ctx context.Context, id string) (*model.PrivilegeEmployeeVO, error) {
+	return s.uc.GetEmployeeByID(ctx, id)
+}
+
+// GetEmployeeByEmpCode returns a single employee binding by its employee code.
+func (s *PrivilegeService) GetEmployeeByEmpCode(ctx context.Context, empCode string) (*model.PrivilegeEmployeeVO, error) {
+	return s.uc.GetEmployeeByEmpCode(ctx, empCode)
+}
+
 // ──────────────────────────── Dictionary ────────────────────────────
 
 // CreateDictionary creates a new dictionary entry.
@@ -353,6 +363,21 @@ func (s *PrivilegeService) DeleteDictionary(ctx context.Context, id string) erro
 // PageDictionaries returns a paginated list of dictionaries.
 func (s *PrivilegeService) PageDictionaries(ctx context.Context, page, size int) ([]*model.PrivilegeDictionary, int64, error) {
 	return s.uc.PageDictionaries(ctx, page, size)
+}
+
+// GetDictionaryByID returns a single dictionary entry by its primary key.
+func (s *PrivilegeService) GetDictionaryByID(ctx context.Context, id string) (*model.PrivilegeDictionary, error) {
+	return s.uc.GetDictionaryByID(ctx, id)
+}
+
+// GetDictionariesBySystemSN returns all dictionary entries for the given system SN.
+func (s *PrivilegeService) GetDictionariesBySystemSN(ctx context.Context, systemSN string) ([]*model.PrivilegeDictionary, error) {
+	return s.uc.GetDictionariesBySystemSN(ctx, systemSN)
+}
+
+// GetDictionariesByPCode returns all dictionary entries with the given parent code.
+func (s *PrivilegeService) GetDictionariesByPCode(ctx context.Context, pcode string) ([]*model.PrivilegeDictionary, error) {
+	return s.uc.GetDictionariesByPCode(ctx, pcode)
 }
 
 // ──────────────────────────── Pvalue ────────────────────────────
@@ -377,11 +402,36 @@ func (s *PrivilegeService) PagePvalues(ctx context.Context, query model.Privileg
 	return s.uc.PagePvalues(ctx, query)
 }
 
+// GetPvalueByID returns a single permission value by its primary key.
+func (s *PrivilegeService) GetPvalueByID(ctx context.Context, id string) (*model.PrivilegePvalue, error) {
+	return s.uc.GetPvalueByID(ctx, id)
+}
+
+// GetPvaluesBySystemID returns all permission values for the given system.
+func (s *PrivilegeService) GetPvaluesBySystemID(ctx context.Context, systemID string) ([]*model.PrivilegePvalue, error) {
+	return s.uc.GetPvaluesBySystemID(ctx, systemID)
+}
+
 // ──────────────────────────── LoginLog ────────────────────────────
 
 // PageLoginLogs returns a paginated list of login logs.
 func (s *PrivilegeService) PageLoginLogs(ctx context.Context, page, size int) ([]*model.PrivilegeLoginLog, int64, error) {
 	return s.uc.PageLoginLogs(ctx, page, size)
+}
+
+// GetLoginLogByID returns a single login log by its primary key.
+func (s *PrivilegeService) GetLoginLogByID(ctx context.Context, id string) (*model.PrivilegeLoginLog, error) {
+	return s.uc.GetLoginLogByID(ctx, id)
+}
+
+// CreateLoginLog creates a new login log entry.
+func (s *PrivilegeService) CreateLoginLog(ctx context.Context, dto model.PrivilegeLoginLogDTO) (*model.PrivilegeLoginLog, error) {
+	return s.uc.CreateLoginLog(ctx, dto)
+}
+
+// DeleteLoginLog soft-deletes a login log by its ID.
+func (s *PrivilegeService) DeleteLoginLog(ctx context.Context, id string) error {
+	return s.uc.DeleteLoginLog(ctx, id)
 }
 
 // ──────────────────────────── Tree / Sync ────────────────────────────

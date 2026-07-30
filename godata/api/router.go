@@ -146,6 +146,55 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			companyGroup.DELETE("/:id", companyHandler.Delete)
 		}
 
+		// 员工绑定管理
+		employeeHandler := privilege.NewEmployeeHandler(privilegeSvc)
+		employeeGroup := api.Group("/privilege/employee")
+		{
+			employeeGroup.GET("/page", employeeHandler.Page)
+			employeeGroup.GET("/:id", employeeHandler.GetByID)
+			employeeGroup.GET("/emp-code/:empCode", employeeHandler.GetByEmpCode)
+			employeeGroup.POST("", employeeHandler.Create)
+			employeeGroup.PUT("", employeeHandler.Update)
+			employeeGroup.DELETE("/:id", employeeHandler.Delete)
+			employeeGroup.POST("/sync", employeeHandler.Sync)
+			employeeGroup.POST("/sync-by-dept/:deptId", employeeHandler.SyncByDept)
+		}
+
+		// 字典管理
+		dictionaryHandler := privilege.NewDictionaryHandler(privilegeSvc)
+		dictionaryGroup := api.Group("/privilege/dictionary")
+		{
+			dictionaryGroup.GET("/page", dictionaryHandler.Page)
+			dictionaryGroup.GET("/:id", dictionaryHandler.GetByID)
+			dictionaryGroup.GET("/system/:systemSn", dictionaryHandler.GetBySystem)
+			dictionaryGroup.GET("/pcode/:pcode", dictionaryHandler.GetByPCode)
+			dictionaryGroup.POST("", dictionaryHandler.Create)
+			dictionaryGroup.PUT("", dictionaryHandler.Update)
+			dictionaryGroup.DELETE("/:id", dictionaryHandler.Delete)
+		}
+
+		// 权限值管理
+		pvalueHandler := privilege.NewPvalueHandler(privilegeSvc)
+		pvalueGroup := api.Group("/privilege/pvalue")
+		{
+			pvalueGroup.POST("/page", pvalueHandler.Page)
+			pvalueGroup.GET("/:id", pvalueHandler.GetByID)
+			pvalueGroup.GET("/system", pvalueHandler.GetBySystem)
+			pvalueGroup.POST("", pvalueHandler.Create)
+			pvalueGroup.PUT("", pvalueHandler.Update)
+			pvalueGroup.DELETE("/:id", pvalueHandler.Delete)
+		}
+
+		// 登录日志管理
+		loginLogHandler := privilege.NewLoginLogHandler(privilegeSvc)
+		loginLogGroup := api.Group("/privilege/login-log")
+		{
+			loginLogGroup.GET("/page", loginLogHandler.Page)
+			loginLogGroup.GET("/:id", loginLogHandler.GetByID)
+			loginLogGroup.POST("", loginLogHandler.Create)
+			loginLogGroup.DELETE("/:id", loginLogHandler.Delete)
+		}
+
 		// Phase 4: agentGroup := api.Group("/agent")
 		// Phase 5: datasourceGroup := api.Group("/datasource")
 		// Phase 5: chatGroup := api.Group("")

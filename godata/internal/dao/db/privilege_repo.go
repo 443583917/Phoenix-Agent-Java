@@ -683,6 +683,12 @@ func (r *pvalueRepo) FindByID(ctx context.Context, id string) (*model.PrivilegeP
 	return &pv, err
 }
 
+func (r *pvalueRepo) FindBySystemID(ctx context.Context, systemID string) ([]*model.PrivilegePvalue, error) {
+	var list []*model.PrivilegePvalue
+	err := r.db.WithContext(ctx).Where("system_id = ? AND del_flag = 0", systemID).Find(&list).Error
+	return list, err
+}
+
 func (r *pvalueRepo) Page(ctx context.Context, query model.PrivilegePvalueQuery) ([]*model.PrivilegePvalue, int64, error) {
 	var list []*model.PrivilegePvalue
 	var total int64
@@ -731,6 +737,19 @@ func NewLoginLogRepository(db *gorm.DB) repository.LoginLogRepository {
 
 func (r *loginLogRepo) Create(ctx context.Context, log *model.PrivilegeLoginLog) error {
 	return r.db.WithContext(ctx).Create(log).Error
+}
+
+func (r *loginLogRepo) FindByID(ctx context.Context, id string) (*model.PrivilegeLoginLog, error) {
+	var log model.PrivilegeLoginLog
+	err := r.db.WithContext(ctx).Where("id = ? AND del_flag = 0", id).First(&log).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &log, err
+}
+
+func (r *loginLogRepo) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Model(&model.PrivilegeLoginLog{}).Where("id = ? AND del_flag = 0", id).Update("del_flag", 1).Error
 }
 
 func (r *loginLogRepo) Page(ctx context.Context, page, size int) ([]*model.PrivilegeLoginLog, int64, error) {

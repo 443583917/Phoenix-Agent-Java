@@ -123,6 +123,7 @@ type PrivilegeCompanyQuery struct {
 
 // PrivilegeEmployeeDTO — 员工绑定请求
 type PrivilegeEmployeeDTO struct {
+	ID       string `json:"id"`
 	UserCode string `json:"userCode" binding:"required"`
 	EmpCode  string `json:"empCode" binding:"required"`
 	DeptID   string `json:"deptId"`
@@ -130,6 +131,7 @@ type PrivilegeEmployeeDTO struct {
 
 // PrivilegeDictionaryDTO — 字典创建/更新请求
 type PrivilegeDictionaryDTO struct {
+	ID       string `json:"id"`
 	Code     string `json:"code" binding:"required"`
 	Name     string `json:"name" binding:"required"`
 	PCode    string `json:"pcode"`
@@ -140,6 +142,7 @@ type PrivilegeDictionaryDTO struct {
 
 // PrivilegePvalueDTO — 权限值创建/更新请求
 type PrivilegePvalueDTO struct {
+	ID       string `json:"id"`
 	Code     string `json:"code" binding:"required"`
 	Name     string `json:"name" binding:"required"`
 	SystemID string `json:"systemId"`
