@@ -4,25 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/internal/service"
 )
 
-// SessionEventHandler handles SSE streaming for session events.
 type SessionEventHandler struct {
 	svc *service.DataService
 }
 
-// NewSessionEventHandler creates a new SessionEventHandler.
 func NewSessionEventHandler(svc *service.DataService) *SessionEventHandler {
 	return &SessionEventHandler{svc: svc}
 }
 
-// StreamSessions streams session update events via SSE.
-// GET /agent/:agentId/sessions/stream
 func (h *SessionEventHandler) StreamSessions(c *gin.Context) {
-	agentId := c.Param("agentId")
+	agentIDStr := c.Param("agentId")
+	agentID, _ := strconv.Atoi(agentIDStr)
+	userID := getUserID(c)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -35,19 +35,38 @@ func (h *SessionEventHandler) StreamSessions(c *gin.Context) {
 		return
 	}
 
-	data := map[string]interface{}{
-		"type": "session_update",
-		"data": map[string]interface{}{
-			"message": "Session event stream - Phase 5 stub",
-			"agentId": agentId,
-		},
+	writeEvent := func(eventType string, data interface{}) {
+		payload := map[string]interface{}{
+			"type": eventType,
+			"data": data,
+		}
+		jsonBytes, err := json.Marshal(payload)
+		if err != nil {
+			return
+		}
+		fmt.Fprintf(c.Writer, "data: %s\n\n", jsonBytes)
+		flusher.Flush()
 	}
 
-	jsonBytes, err := json.Marshal(data)
-	if err != nil {
-		return
+	list, err := h.svc.ListChatSessions(c.Request.Context(), agentID, userID)
+	if err == nil && list != nil {
+		writeEvent("session_update", map[string]interface{}{
+			"sessions": list,
+			"count":    len(list),
+		})
 	}
 
-	fmt.Fprintf(c.Writer, "data: %s\n\n", jsonBytes)
-	flusher.Flush()
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case <-ticker.C:
+			writeEvent("heartbeat", map[string]interface{}{
+				"timestamp": time.Now().Unix(),
+			})
+		}
+	}
 }

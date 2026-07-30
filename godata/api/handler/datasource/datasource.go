@@ -163,6 +163,28 @@ func (h *DatasourceHandler) DeleteLogicalRelation(c *gin.Context) {
 	response.Success(c, true)
 }
 
+func (h *DatasourceHandler) UpdateSingleLogicalRelation(c *gin.Context) {
+	var entity model.LogicalRelation
+	if err := c.ShouldBindJSON(&entity); err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	entity.ID = c.Param("relationId")
+	if err := h.svc.UpdateLogicalRelation(c.Request.Context(), &entity); err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, true)
+}
+
+func (h *DatasourceHandler) DeleteSingleLogicalRelation(c *gin.Context) {
+	if err := h.svc.DeleteLogicalRelation(c.Request.Context(), c.Param("relationId")); err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, true)
+}
+
 func handleErr(c *gin.Context, err error) {
 	if appErr, ok := err.(*usecase.AppError); ok {
 		response.ErrorWithMsg(c, errcode.ErrCode{Code: appErr.Code}, appErr.Msg)

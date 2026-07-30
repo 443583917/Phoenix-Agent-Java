@@ -220,6 +220,12 @@ func (s *DataService) UpdateLogicalRelations(ctx context.Context, datasourceID i
 func (s *DataService) DeleteLogicalRelations(ctx context.Context, datasourceID int) error {
 	return s.uc.DeleteLogicalRelations(ctx, datasourceID)
 }
+func (s *DataService) UpdateLogicalRelation(ctx context.Context, entity *model.LogicalRelation) error {
+	return s.uc.UpdateLogicalRelation(ctx, entity)
+}
+func (s *DataService) DeleteLogicalRelation(ctx context.Context, id string) error {
+	return s.uc.DeleteLogicalRelation(ctx, id)
+}
 
 // ──────────────────────────── ModelConfig ────────────────────────────
 
@@ -240,6 +246,9 @@ func (s *DataService) ActivateModelConfig(ctx context.Context, id string) error 
 }
 func (s *DataService) CheckModelConfigReady(ctx context.Context) (bool, error) {
 	return s.uc.CheckModelConfigReady(ctx)
+}
+func (s *DataService) TestModelConfig(ctx context.Context, entity *model.ModelConfig) (bool, error) {
+	return s.uc.TestModelConfig(ctx, entity)
 }
 
 // ──────────────────────────── UserPromptConfig ────────────────────────────
@@ -310,6 +319,9 @@ func (s *DataService) EnableSemanticModels(ctx context.Context, ids []string) er
 func (s *DataService) DisableSemanticModels(ctx context.Context, ids []string) error {
 	return s.uc.DisableSemanticModels(ctx, ids)
 }
+func (s *DataService) BatchCreateSemanticModels(ctx context.Context, entities []*model.SemanticModel) (int, error) {
+	return s.uc.BatchCreateSemanticModels(ctx, entities)
+}
 
 // ──────────────────────────── BusinessKnowledge ────────────────────────────
 
@@ -330,4 +342,13 @@ func (s *DataService) DeleteBusinessKnowledge(ctx context.Context, id string) er
 }
 func (s *DataService) RetryBusinessKnowledgeEmbedding(ctx context.Context, id string) error {
 	return s.uc.RetryBusinessKnowledgeEmbedding(ctx, id)
+}
+func (s *DataService) ToggleBusinessKnowledgeRecall(ctx context.Context, id string, isRecall bool) error {
+	return s.uc.ToggleBusinessKnowledgeRecall(ctx, id, isRecall)
+}
+func (s *DataService) ToggleBusinessKnowledgeRecallOn(ctx context.Context, id string) error {
+	return s.uc.ToggleBusinessKnowledgeRecallOn(ctx, id)
+}
+func (s *DataService) RefreshBusinessKnowledgeVectorStore(ctx context.Context, agentID int64) (int64, error) {
+	return s.uc.RefreshBusinessKnowledgeVectorStore(ctx, agentID)
 }

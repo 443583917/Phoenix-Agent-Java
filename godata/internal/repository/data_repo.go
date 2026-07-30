@@ -103,9 +103,11 @@ type DatasourceRepository interface {
 // ──────────────────────────── LogicalRelation ────────────────────────────
 
 type LogicalRelationRepository interface {
+	FindByID(ctx context.Context, id string) (*model.LogicalRelation, error)
 	FindByDatasourceID(ctx context.Context, datasourceID int) ([]*model.LogicalRelation, error)
 	Create(ctx context.Context, lr *model.LogicalRelation) error
 	Update(ctx context.Context, lr *model.LogicalRelation) error
+	Delete(ctx context.Context, id string) error
 	DeleteByDatasourceID(ctx context.Context, datasourceID int) error
 }
 
@@ -145,6 +147,7 @@ type SemanticModelRepository interface {
 	Delete(ctx context.Context, id string) error
 	BatchDelete(ctx context.Context, ids []string) error
 	BatchUpdateStatus(ctx context.Context, ids []string, status int) error
+	BatchCreate(ctx context.Context, sms []*model.SemanticModel) error
 }
 
 // ──────────────────────────── BusinessKnowledge ────────────────────────────
@@ -155,6 +158,9 @@ type BusinessKnowledgeRepository interface {
 	Create(ctx context.Context, bk *model.BusinessKnowledge) error
 	Update(ctx context.Context, bk *model.BusinessKnowledge) error
 	Delete(ctx context.Context, id string) error
+	UpdateRecall(ctx context.Context, id string, isRecall int) error
+	FindByAgentID(ctx context.Context, agentID int64) ([]*model.BusinessKnowledge, error)
+	BatchResetEmbedding(ctx context.Context, agentID int64) (int64, error)
 }
 
 // ──────────────────────────── DatasourceAccessor ────────────────────────────

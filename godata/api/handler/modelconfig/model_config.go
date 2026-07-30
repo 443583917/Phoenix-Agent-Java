@@ -2,6 +2,7 @@ package modelconfig
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/infra/errcode"
@@ -74,9 +75,19 @@ func (h *ModelConfigHandler) Activate(c *gin.Context) {
 }
 
 func (h *ModelConfigHandler) Test(c *gin.Context) {
-	var body map[string]interface{}
-	_ = c.ShouldBindJSON(&body)
-	response.Success(c, gin.H{"success": true, "latency": "100ms"})
+	var entity model.ModelConfig
+	if err := c.ShouldBindJSON(&entity); err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	start := time.Now()
+	result, err := h.svc.TestModelConfig(c.Request.Context(), &entity)
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		response.Success(c, gin.H{"success": false, "message": err.Error(), "latency": latency})
+		return
+	}
+	response.Success(c, gin.H{"success": result, "latency": latency})
 }
 
 func (h *ModelConfigHandler) CheckReady(c *gin.Context) {

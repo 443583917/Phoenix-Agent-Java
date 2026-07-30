@@ -1,31 +1,71 @@
 package nodes
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"strings"
 
-// RetrieveNode is a stub for the document retrieval step in the RAG workflow.
+	"github.com/phoenix-agent-go/agent/knowledge"
+	"github.com/phoenix-agent-go/agent/workflows/rag/types"
+	"trpc.group/trpc-go/trpc-agent-go/graph"
+)
+
 type RetrieveNode struct {
-	name string
+	Retriever *knowledge.Retriever
 }
 
-func NewRetrieveNode() *RetrieveNode {
-	return &RetrieveNode{name: "retrieve"}
+func (n *RetrieveNode) Name() string { return "retrieve" }
+
+func (n *RetrieveNode) Execute(ctx context.Context, state graph.State) (any, error) {
+	ragState := getRAGState(state)
+	topK := ragState.TopK
+	if topK <= 0 {
+		topK = 5
+	}
+
+	var docs []knowledge.Document
+	if n.Retriever != nil {
+		var err error
+		docs, err = n.Retriever.Search(ctx, ragState.Input, topK)
+		if err != nil {
+			docs = nil
+		}
+	}
+
+	ragState.Documents = docs
+	ragState.Context = assembleContext(docs)
+
+	return graph.State{
+		"rag_state": ragState,
+	}, nil
 }
 
-func (n *RetrieveNode) Name() string {
-	return n.name
+type AssembleNode struct{}
+
+func (n *AssembleNode) Name() string { return "assemble" }
+
+func (n *AssembleNode) Execute(ctx context.Context, state graph.State) (any, error) {
+	ragState := getRAGState(state)
+	if ragState.Context == "" && len(ragState.Documents) > 0 {
+		ragState.Context = assembleContext(ragState.Documents)
+	}
+
+	return graph.State{
+		"rag_state": ragState,
+	}, nil
 }
 
-// Execute retrieves relevant documents based on the query.
-// This is a stub — actual implementation will use vector search (Milvus) and
-// keyword search to find relevant documents.
-func (n *RetrieveNode) Execute(ctx context.Context, query string, topK int) ([]Document, error) {
-	return nil, nil
+func getRAGState(state graph.State) *types.RagState {
+	if s, ok := state["rag_state"].(*types.RagState); ok && s != nil {
+		return s
+	}
+	return &types.RagState{}
 }
 
-// Document represents a retrieved document chunk.
-type Document struct {
-	ID       string  `json:"id"`
-	Content  string  `json:"content"`
-	Score    float64 `json:"score"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+func assembleContext(docs []knowledge.Document) string {
+	var parts []string
+	for i, doc := range docs {
+		parts = append(parts, fmt.Sprintf("[文档 %d] %s", i+1, doc.Content))
+	}
+	return strings.Join(parts, "\n\n")
 }

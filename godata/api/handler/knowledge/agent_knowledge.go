@@ -162,3 +162,23 @@ func (h *AgentKnowledgeHandler) RetryEmbedding(c *gin.Context) {
 	}
 	response.Success(c, true)
 }
+
+// QueryPage returns a paginated list using POST body for complex filter conditions.
+// POST /api/agent-knowledge/query/page
+func (h *AgentKnowledgeHandler) QueryPage(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "10"))
+
+	var query model.AgentKnowledge
+	if err := c.ShouldBindJSON(&query); err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+
+	list, total, err := h.svc.PageAgentKnowledge(c.Request.Context(), page, size, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.SuccessPage(c, list, total, page, size)
+}

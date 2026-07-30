@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/phoenix-agent-go/internal/service"
 	"trpc.group/trpc-go/trpc-agent-go/tool"
@@ -20,7 +21,7 @@ func NewCheckTool(svc *service.PrivilegeService) *CheckTool {
 func (t *CheckTool) Declaration() *tool.Declaration {
 	return &tool.Declaration{
 		Name:        "check_privilege",
-		Description: "Check if a user has a specific privilege or role",
+		Description: "Check if a user has a specific privilege. Returns user status, active state, and role membership.",
 		InputSchema: &tool.Schema{
 			Type:     "object",
 			Required: []string{"userId"},
@@ -31,7 +32,7 @@ func (t *CheckTool) Declaration() *tool.Declaration {
 				},
 				"roleCode": {
 					Type:        "string",
-					Description: "Role code to check against",
+					Description: "Optional role name/code to verify against the user's assigned roles",
 				},
 			},
 		},
@@ -63,10 +64,31 @@ func (t *CheckTool) Call(ctx context.Context, args any) (any, error) {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 
-	hasAccess := user.Status == 0
-	return map[string]any{
-		"userId":     params.UserID,
-		"hasAccess":  hasAccess,
-		"statusCode": user.Status,
-	}, nil
+	isActive := user.Status == 0
+	result := map[string]any{
+		"userId":    params.UserID,
+		"username":  user.Username,
+		"hasAccess": isActive,
+		"status":    user.Status,
+	}
+
+	if params.RoleCode != "" {
+		userRoles, err := t.svc.GetUserRolesByUserID(ctx, params.UserID)
+		if err == nil {
+			hasRole := false
+			for _, ur := range userRoles {
+				if strings.EqualFold(ur.RoleName, params.RoleCode) {
+					hasRole = true
+					break
+				}
+			}
+			result["hasRole"] = hasRole
+			result["roleCode"] = params.RoleCode
+		} else {
+			result["hasRole"] = false
+			result["roleCode"] = params.RoleCode
+		}
+	}
+
+	return result, nil
 }

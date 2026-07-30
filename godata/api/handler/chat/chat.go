@@ -1,7 +1,10 @@
 package chat
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/infra/errcode"
@@ -112,9 +115,37 @@ func (h *ChatHandler) DeleteSession(c *gin.Context) {
 }
 
 func (h *ChatHandler) GenerateReportHTML(c *gin.Context) {
-	response.Success(c, gin.H{
-		"html": "<html><body><h1>Report</h1></body></html>",
-	})
+	sessionID := c.Param("id")
+	messages, err := h.svc.GetSessionMessages(c.Request.Context(), sessionID)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Session Report</title>`)
+	sb.WriteString(`<style>body{font-family:sans-serif;max-width:800px;margin:0 auto;padding:20px}
+		.msg{margin:10px 0;padding:10px;border-radius:8px}
+		.user{background:#e3f2fd}.assistant{background:#f5f5f5}
+		h1{color:#333;border-bottom:2px solid #2196f3;padding-bottom:10px}</style></head><body>`)
+	sb.WriteString(`<h1>Session Report</h1>`)
+
+	if len(messages) == 0 {
+		sb.WriteString(`<p>No messages in this session.</p>`)
+	} else {
+		for _, msg := range messages {
+			role := msg.Role
+			if role == "" {
+				role = "user"
+			}
+			sb.WriteString(fmt.Sprintf(`<div class="msg %s"><strong>%s:</strong><br>%s</div>`, role, role, msg.Content))
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf(`<hr><small>Generated at %s | Session: %s</small>`, time.Now().Format("2006-01-02 15:04:05"), sessionID))
+	sb.WriteString(`</body></html>`)
+
+	response.Success(c, gin.H{"html": sb.String()})
 }
 
 func getUserID(c *gin.Context) string {

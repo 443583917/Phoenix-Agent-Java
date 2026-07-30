@@ -258,7 +258,9 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		categoryGroup := dataAPI.Group("/agent-category")
 		{
 			categoryGroup.GET("/page", categoryHandler.Page)
+			categoryGroup.GET("/list", categoryHandler.List)
 			categoryGroup.GET("/tree", categoryHandler.Tree)
+			categoryGroup.GET("/pid/:pid", categoryHandler.GetByPID)
 			categoryGroup.GET("/:id", categoryHandler.GetByID)
 			categoryGroup.POST("", categoryHandler.Create)
 			categoryGroup.PUT("", categoryHandler.Update)
@@ -278,12 +280,16 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			dsGroup.GET("/:id/tables", dsHandler.GetTables)
 			dsGroup.POST("/:id/tables", dsHandler.SaveTables)
 		}
+		dataAPI.GET("/agent/:agentId/datasources", dsHandler.List)
+		dataAPI.GET("/agent/:agentId/datasources/active", dsHandler.GetActive)
+		dataAPI.POST("/agent/:agentId/datasources/init", dsHandler.InitSchema)
 
 		// ---- AgentKnowledge ----
 		knHandler := knowledgeHandler.NewAgentKnowledgeHandler(dataSvc)
 		knGroup := dataAPI.Group("/agent-knowledge")
 		{
 			knGroup.GET("/page", knHandler.Page)
+			knGroup.POST("/query/page", knHandler.QueryPage)
 			knGroup.GET("/:id", knHandler.GetByID)
 			knGroup.POST("", knHandler.Create)
 			knGroup.PUT("", knHandler.Update)
@@ -297,11 +303,16 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		pqGroup := dataAPI.Group("/agent/:agentId/preset-question")
 		{
 			pqGroup.GET("/page", pqHandler.Page)
+			pqGroup.GET("/", pqHandler.List)
 			pqGroup.GET("/:id", pqHandler.GetByID)
 			pqGroup.POST("", pqHandler.Create)
 			pqGroup.PUT("", pqHandler.Update)
 			pqGroup.DELETE("/:id", pqHandler.Delete)
 		}
+
+		// ---- AgentPresetQuestion batch + account filter ----
+		dataAPI.GET("/agent/:agentId/:accountId/preset-questions", pqHandler.ListByAccount)
+		dataAPI.POST("/agent/:agentId/preset-questions", pqHandler.BatchSave)
 		// ---- Chat - Session & Message Management ----
 		chatHandler := chat.NewChatHandler(dataSvc)
 		dataAPI.GET("/agent/:id/sessions", chatHandler.ListSessions)
@@ -315,7 +326,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		dataAPI.POST("/sessions/:id/reports/html", chatHandler.GenerateReportHTML)
 
 		// ---- Graph Search (SSE) ----
-		graphHandler := chat.NewGraphHandler(dataSvc, nil, nil)
+		graphHandler := chat.NewGraphHandler(dataSvc, nil, nil, nil)
 		dataAPI.GET("/stream/search", graphHandler.StreamSearch)
 
 		// ---- Session Events (SSE) ----
@@ -338,7 +349,9 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			dsDataGroup.GET("/:id/logical-relations", dsDataHandler.ListLogicalRelations)
 			dsDataGroup.POST("/:id/logical-relations", dsDataHandler.CreateLogicalRelation)
 			dsDataGroup.PUT("/:id/logical-relations", dsDataHandler.UpdateLogicalRelation)
+			dsDataGroup.PUT("/:id/logical-relations/:relationId", dsDataHandler.UpdateSingleLogicalRelation)
 			dsDataGroup.DELETE("/:id/logical-relations", dsDataHandler.DeleteLogicalRelation)
+			dsDataGroup.DELETE("/:id/logical-relations/:relationId", dsDataHandler.DeleteSingleLogicalRelation)
 		}
 
 		// ---- Model Configuration ----

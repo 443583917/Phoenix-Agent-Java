@@ -754,6 +754,28 @@ func (u *DataUsecase) DeleteLogicalRelations(ctx context.Context, datasourceID i
 	return u.logicalRelationRepo.DeleteByDatasourceID(ctx, datasourceID)
 }
 
+func (u *DataUsecase) UpdateLogicalRelation(ctx context.Context, entity *model.LogicalRelation) error {
+	existing, err := u.logicalRelationRepo.FindByID(ctx, entity.ID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrLogicalRelationNotFound
+	}
+	return u.logicalRelationRepo.Update(ctx, entity)
+}
+
+func (u *DataUsecase) DeleteLogicalRelation(ctx context.Context, id string) error {
+	existing, err := u.logicalRelationRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrLogicalRelationNotFound
+	}
+	return u.logicalRelationRepo.Delete(ctx, id)
+}
+
 // ──────────────────────────── ModelConfig ────────────────────────────
 
 func (u *DataUsecase) PageModelConfig(ctx context.Context, page, size int) ([]*model.ModelConfig, int64, error) {
@@ -811,6 +833,13 @@ func (u *DataUsecase) CheckModelConfigReady(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return active != nil, nil
+}
+
+func (u *DataUsecase) TestModelConfig(ctx context.Context, entity *model.ModelConfig) (bool, error) {
+	if entity.BaseUrl == "" || entity.ModelName == "" {
+		return false, fmt.Errorf("baseUrl and modelName are required")
+	}
+	return true, nil
 }
 
 // ──────────────────────────── UserPromptConfig ────────────────────────────
@@ -985,6 +1014,22 @@ func (u *DataUsecase) DisableSemanticModels(ctx context.Context, ids []string) e
 	return u.semanticModelRepo.BatchUpdateStatus(ctx, ids, 0)
 }
 
+func (u *DataUsecase) BatchCreateSemanticModels(ctx context.Context, entities []*model.SemanticModel) (int, error) {
+	for i, e := range entities {
+		if e.ID == "" {
+			e.ID = dataGenID()
+		}
+		if e.Status == 0 {
+			e.Status = 1
+		}
+		entities[i] = e
+	}
+	if err := u.semanticModelRepo.BatchCreate(ctx, entities); err != nil {
+		return 0, err
+	}
+	return len(entities), nil
+}
+
 // ──────────────────────────── BusinessKnowledge ────────────────────────────
 
 func (u *DataUsecase) PageBusinessKnowledge(ctx context.Context, page, size int, query *model.BusinessKnowledge) ([]*model.BusinessKnowledge, int64, error) {
@@ -1049,4 +1094,40 @@ func (u *DataUsecase) RetryBusinessKnowledgeEmbedding(ctx context.Context, id st
 	existing.EmbeddingStatus = "pending"
 	existing.ErrorMsg = ""
 	return u.businessKnowledgeRepo.Update(ctx, existing)
+}
+
+func (u *DataUsecase) ToggleBusinessKnowledgeRecall(ctx context.Context, id string, isRecall bool) error {
+	existing, err := u.businessKnowledgeRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrBusinessKnowledgeNotFound
+	}
+	val := 0
+	if isRecall {
+		val = 1
+	}
+	return u.businessKnowledgeRepo.UpdateRecall(ctx, id, val)
+}
+
+func (u *DataUsecase) ToggleBusinessKnowledgeRecallOn(ctx context.Context, id string) error {
+	existing, err := u.businessKnowledgeRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrBusinessKnowledgeNotFound
+	}
+	val := 0
+	if existing.IsRecall == 1 {
+		val = 0
+	} else {
+		val = 1
+	}
+	return u.businessKnowledgeRepo.UpdateRecall(ctx, id, val)
+}
+
+func (u *DataUsecase) RefreshBusinessKnowledgeVectorStore(ctx context.Context, agentID int64) (int64, error) {
+	return u.businessKnowledgeRepo.BatchResetEmbedding(ctx, agentID)
 }

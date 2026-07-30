@@ -116,3 +116,29 @@ func (h *AgentCategoryHandler) Delete(c *gin.Context) {
 	}
 	response.Success(c, true)
 }
+
+// List returns all categories (non-paginated, with optional name search).
+// GET /api/agent-category/list
+func (h *AgentCategoryHandler) List(c *gin.Context) {
+	var query model.AgentCategory
+	_ = c.ShouldBindQuery(&query)
+	list, _, err := h.svc.PageAgentCategory(c.Request.Context(), 1, 1000, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
+}
+
+// GetByPID returns categories by parent ID.
+// GET /api/agent-category/pid/:pid
+func (h *AgentCategoryHandler) GetByPID(c *gin.Context) {
+	var query model.AgentCategory
+	query.Pid = c.Param("pid")
+	list, _, err := h.svc.PageAgentCategory(c.Request.Context(), 1, 1000, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
+}

@@ -78,16 +78,35 @@ func (h *BusinessKnowledgeHandler) Delete(c *gin.Context) {
 }
 
 func (h *BusinessKnowledgeHandler) Recall(c *gin.Context) {
-	entity, err := h.svc.GetBusinessKnowledgeByID(c.Request.Context(), c.Param("id"))
-	if err != nil {
-		handleErr(c, err)
-		return
+	id := c.Param("id")
+	isRecall := c.Query("isRecall")
+	if isRecall == "true" {
+		if err := h.svc.ToggleBusinessKnowledgeRecall(c.Request.Context(), id, true); err != nil {
+			handleErr(c, err)
+			return
+		}
+	} else if isRecall == "false" {
+		if err := h.svc.ToggleBusinessKnowledgeRecall(c.Request.Context(), id, false); err != nil {
+			handleErr(c, err)
+			return
+		}
+	} else {
+		if err := h.svc.ToggleBusinessKnowledgeRecallOn(c.Request.Context(), id); err != nil {
+			handleErr(c, err)
+			return
+		}
 	}
-	response.Success(c, gin.H{"id": entity.ID, "results": []interface{}{}, "recalled": true})
+	response.Success(c, gin.H{"id": id, "recalled": true})
 }
 
 func (h *BusinessKnowledgeHandler) RefreshVectorStore(c *gin.Context) {
-	response.Success(c, gin.H{"refreshed": true, "message": "Vector store refresh triggered"})
+	agentID, _ := strconv.ParseInt(c.Query("agentId"), 10, 64)
+	count, err := h.svc.RefreshBusinessKnowledgeVectorStore(c.Request.Context(), agentID)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, gin.H{"refreshed": true, "count": count})
 }
 
 func (h *BusinessKnowledgeHandler) RetryEmbedding(c *gin.Context) {

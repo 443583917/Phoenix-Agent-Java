@@ -1,7 +1,10 @@
 package semanticmodel
 
 import (
+	"encoding/csv"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/infra/errcode"
@@ -123,19 +126,27 @@ func (h *SemanticModelHandler) Disable(c *gin.Context) {
 }
 
 func (h *SemanticModelHandler) BatchImport(c *gin.Context) {
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	var entities []*model.SemanticModel
+	if err := c.ShouldBindJSON(&entities); err != nil {
 		response.Error(c, errcode.InvalidParams)
 		return
 	}
-	response.Success(c, gin.H{"imported": true})
+	count, err := h.svc.BatchCreateSemanticModels(c.Request.Context(), entities)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, gin.H{"imported": count})
 }
 
 func (h *SemanticModelHandler) DownloadTemplate(c *gin.Context) {
-	response.Success(c, gin.H{
-		"template":    "semantic_model_template.xlsx",
-		"description": "Upload this template with semantic model data",
-	})
+	c.Header("Content-Type", "text/csv")
+	c.Header("Content-Disposition", `attachment; filename="semantic_model_template.csv"`)
+
+	w := csv.NewWriter(c.Writer)
+	_ = w.Write([]string{"agentId", "datasourceId", "tableName", "columnName", "businessName", "synonyms", "businessDescription", "columnComment", "dataType"})
+	_ = w.Write([]string{"1", "1", "users", "name", "用户姓名", "姓名;用户名", "存储用户的姓名信息", "", "varchar(128)"})
+	w.Flush()
 }
 
 func (h *SemanticModelHandler) ImportExcel(c *gin.Context) {
@@ -144,7 +155,50 @@ func (h *SemanticModelHandler) ImportExcel(c *gin.Context) {
 		response.Error(c, errcode.InvalidParams)
 		return
 	}
-	response.Success(c, gin.H{"imported": true, "filename": file.Filename, "size": file.Size})
+
+	f, err := file.Open()
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	defer f.Close()
+
+	reader := csv.NewReader(f)
+	records, err := reader.ReadAll()
+	if err != nil {
+		response.ErrorWithMsg(c, errcode.InvalidParams, fmt.Sprintf("CSV解析失败: %v", err))
+		return
+	}
+
+	var entities []*model.SemanticModel
+	for i, row := range records {
+		if i == 0 {
+			continue
+		}
+		if len(row) < 9 {
+			continue
+		}
+		agentID, _ := strconv.ParseInt(strings.TrimSpace(row[0]), 10, 64)
+		dsID, _ := strconv.Atoi(strings.TrimSpace(row[1]))
+		entities = append(entities, &model.SemanticModel{
+			AgentId:             agentID,
+			DatasourceId:        dsID,
+			Table:               strings.TrimSpace(row[2]),
+			ColumnName:          strings.TrimSpace(row[3]),
+			BusinessName:        strings.TrimSpace(row[4]),
+			Synonyms:            strings.TrimSpace(row[5]),
+			BusinessDescription: strings.TrimSpace(row[6]),
+			ColumnComment:       strings.TrimSpace(row[7]),
+			DataType:            strings.TrimSpace(row[8]),
+		})
+	}
+
+	count, err := h.svc.BatchCreateSemanticModels(c.Request.Context(), entities)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, gin.H{"imported": count, "filename": file.Filename})
 }
 
 func handleErr(c *gin.Context, err error) {

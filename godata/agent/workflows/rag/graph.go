@@ -1,50 +1,50 @@
 package rag
 
-import "context"
+import (
+	"reflect"
 
-// RagWorkflow represents a RAG retrieval workflow.
-// This is a stub that will be filled in with actual workflow logic.
-type RagWorkflow struct {
-	name string
+	"github.com/phoenix-agent-go/agent/knowledge"
+	"github.com/phoenix-agent-go/agent/workflows/rag/nodes"
+	"github.com/phoenix-agent-go/agent/workflows/rag/types"
+	"trpc.group/trpc-go/trpc-agent-go/graph"
+)
+
+const (
+	NodeRetrieve = "retrieve"
+	NodeAssemble = "assemble"
+)
+
+type RagGraph struct {
+	retriever *knowledge.Retriever
 }
 
-func NewRagWorkflow() *RagWorkflow {
-	return &RagWorkflow{name: "rag-workflow"}
+func NewRagGraph(retriever *knowledge.Retriever) *RagGraph {
+	return &RagGraph{retriever: retriever}
 }
 
-func (w *RagWorkflow) Name() string {
-	return w.name
+func (g *RagGraph) Build() (*graph.Graph, error) {
+	schema := graph.NewStateSchema()
+	schema.AddField("rag_state", graph.StateField{
+		Type:    reflectType[*types.RagState](),
+		Reducer: graph.DefaultReducer,
+		Default: func() any { return &types.RagState{} },
+	})
+
+	sg := graph.NewStateGraph(schema)
+
+	retrieveNode := &nodes.RetrieveNode{Retriever: g.retriever}
+	assembleNode := &nodes.AssembleNode{}
+
+	sg.AddNode(retrieveNode.Name(), retrieveNode.Execute)
+	sg.AddNode(assembleNode.Name(), assembleNode.Execute)
+
+	sg.SetEntryPoint(NodeRetrieve)
+	sg.AddEdge(NodeRetrieve, NodeAssemble)
+	sg.AddEdge(NodeAssemble, graph.End)
+
+	return sg.Compile()
 }
 
-// Run executes the RAG workflow.
-// This is a stub — actual implementation will integrate with the agent runtime.
-func (w *RagWorkflow) Run(ctx context.Context, query string, opts ...Option) (string, error) {
-	return "", nil
-}
-
-// Option is a functional option for RagWorkflow.
-type Option func(*options)
-
-type options struct {
-	TopK        int
-	CategoryIDs []string
-	FileTypes   []string
-}
-
-func WithTopK(k int) Option {
-	return func(o *options) {
-		o.TopK = k
-	}
-}
-
-func WithCategoryIDs(ids ...string) Option {
-	return func(o *options) {
-		o.CategoryIDs = ids
-	}
-}
-
-func WithFileTypes(types ...string) Option {
-	return func(o *options) {
-		o.FileTypes = types
-	}
+func reflectType[T any]() reflect.Type {
+	return reflect.TypeOf((*T)(nil)).Elem()
 }

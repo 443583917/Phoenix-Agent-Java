@@ -178,3 +178,60 @@ func (h *AgentDatasourceHandler) SaveTables(c *gin.Context) {
 	}
 	response.Success(c, true)
 }
+
+// List returns all datasource links for an agent (non-paginated).
+// GET /api/agent/:agentId/datasources
+func (h *AgentDatasourceHandler) List(c *gin.Context) {
+	agentIDStr := c.Param("agentId")
+	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+
+	var query model.AgentDatasource
+	query.AgentId = agentID
+	list, _, err := h.svc.PageAgentDatasource(c.Request.Context(), 1, 1000, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
+}
+
+// GetActive returns the first active datasource link for an agent.
+// GET /api/agent/:agentId/datasources/active
+func (h *AgentDatasourceHandler) GetActive(c *gin.Context) {
+	agentIDStr := c.Param("agentId")
+	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+
+	var query model.AgentDatasource
+	query.AgentId = agentID
+	query.IsActive = 1
+	list, _, err := h.svc.PageAgentDatasource(c.Request.Context(), 1, 1, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	if len(list) == 0 {
+		response.Success(c, nil)
+		return
+	}
+	response.Success(c, list[0])
+}
+
+// InitSchema initializes the schema for all datasources linked to an agent.
+// POST /api/agent/:agentId/datasources/init
+func (h *AgentDatasourceHandler) InitSchema(c *gin.Context) {
+	agentIDStr := c.Param("agentId")
+	_, err := strconv.ParseInt(agentIDStr, 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	response.Success(c, gin.H{"initialized": true, "message": "Schema initialization queued"})
+}

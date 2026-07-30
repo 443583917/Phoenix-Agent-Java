@@ -548,6 +548,19 @@ func (r *logicalRelationRepo) Update(ctx context.Context, entity *model.LogicalR
 	return r.db.WithContext(ctx).Model(&model.LogicalRelation{}).Where("id = ? AND del_flag = 0", entity.ID).Updates(entity).Error
 }
 
+func (r *logicalRelationRepo) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Model(&model.LogicalRelation{}).Where("id = ? AND del_flag = 0", id).Update("del_flag", 1).Error
+}
+
+func (r *logicalRelationRepo) FindByID(ctx context.Context, id string) (*model.LogicalRelation, error) {
+	var entity model.LogicalRelation
+	err := r.db.WithContext(ctx).Where("id = ? AND del_flag = 0", id).First(&entity).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &entity, err
+}
+
 func (r *logicalRelationRepo) DeleteByDatasourceID(ctx context.Context, datasourceID int) error {
 	return r.db.WithContext(ctx).Model(&model.LogicalRelation{}).Where("datasource_id = ? AND del_flag = 0", datasourceID).Update("del_flag", 1).Error
 }
@@ -764,6 +777,10 @@ func (r *semanticModelRepo) BatchUpdateStatus(ctx context.Context, ids []string,
 	return r.db.WithContext(ctx).Model(&model.SemanticModel{}).Where("id IN ? AND del_flag = 0", ids).Update("status", status).Error
 }
 
+func (r *semanticModelRepo) BatchCreate(ctx context.Context, sms []*model.SemanticModel) error {
+	return r.db.WithContext(ctx).CreateInBatches(sms, 100).Error
+}
+
 // ──────────────────────────── BusinessKnowledge ────────────────────────────
 
 type businessKnowledgeRepo struct{ db *gorm.DB }
@@ -822,4 +839,21 @@ func (r *businessKnowledgeRepo) Update(ctx context.Context, entity *model.Busine
 
 func (r *businessKnowledgeRepo) Delete(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Model(&model.BusinessKnowledge{}).Where("id = ? AND del_flag = 0", id).Update("del_flag", 1).Error
+}
+
+func (r *businessKnowledgeRepo) UpdateRecall(ctx context.Context, id string, isRecall int) error {
+	return r.db.WithContext(ctx).Model(&model.BusinessKnowledge{}).Where("id = ? AND del_flag = 0", id).Update("is_recall", isRecall).Error
+}
+
+func (r *businessKnowledgeRepo) FindByAgentID(ctx context.Context, agentID int64) ([]*model.BusinessKnowledge, error) {
+	var list []*model.BusinessKnowledge
+	err := r.db.WithContext(ctx).Where("agent_id = ? AND del_flag = 0", agentID).Find(&list).Error
+	return list, err
+}
+
+func (r *businessKnowledgeRepo) BatchResetEmbedding(ctx context.Context, agentID int64) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&model.BusinessKnowledge{}).
+		Where("agent_id = ? AND del_flag = 0", agentID).
+		Updates(map[string]interface{}{"embedding_status": "pending", "error_msg": ""})
+	return result.RowsAffected, result.Error
 }
