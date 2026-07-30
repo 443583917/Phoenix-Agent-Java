@@ -1,6 +1,7 @@
 # Phoenix Go 重写 — 设计文档
 
 > 将 Phoenix-Agent-Java（Spring AI Alibaba）后端全部迁移到 Go，前端 API 契约保持不变。
+> Java 版本没有对应映射代码的模块先保留空目录，后续填充。
 
 ## 1. 概述
 
@@ -59,173 +60,119 @@ Docker Python Executor     →  Go Docker SDK
 
 ```
 godata/
-├── cmd/                        # 多服务入口
-│   ├── api/main.go             # HTTP API 服务（端口 8066）
+├── cmd/                        # 多服务入口（每个服务独立进程）
+│   ├── api/main.go             # HTTP API 服务
 │   ├── rpc/main.go             # gRPC 服务
-│   ├── agent/main.go           # Agent 独立服务
+│   ├── agent/main.go           # Agent 服务（可独立部署）
 │   └── job/main.go             # 定时任务服务
 │
-├── api/                        # HTTP API 层（Gin）
+├── api/                        # API 层（Gin）
 │   ├── router.go               # 总路由注册
-│   ├── handler/
-│   │   ├── agent/              # 智能体 API handler
-│   │   ├── datasource/         # 数据源 API handler
-│   │   ├── chat/               # 对话/SSE API handler
-│   │   ├── knowledge/          # 知识库 API handler
-│   │   ├── modelconfig/        # 模型配置 API handler
-│   │   ├── prompt/             # Prompt 配置 API handler
-│   │   ├── semanticmodel/      # 语义模型 API handler
-│   │   ├── privilege/          # 权限认证 API handler
-│   │   ├── platform/           # 平台管理 API handler
-│   │   ├── rag/                # RAG API handler
-│   │   ├── kg/                 # 知识图谱 API handler
-│   │   └── common/             # 公共 API handler
-│   └── middleware/
-│       ├── auth.go             # OAuth2 JWT 认证
-│       ├── rbac.go             # Casbin RBAC
+│   ├── handler/                # 控制器层（按业务域拆分）
+│   │   ├── agent/
+│   │   ├── datasource/
+│   │   ├── chat/
+│   │   ├── knowledge/
+│   │   ├── modelconfig/
+│   │   ├── prompt/
+│   │   ├── semanticmodel/
+│   │   ├── privilege/
+│   │   ├── platform/
+│   │   ├── rag/
+│   │   ├── kg/
+│   │   └── common/
+│   └── middleware/             # API 中间件
+│       ├── auth.go
+│       ├── rbac.go
 │       ├── cors.go
-│       ├── logger.go           # Zap 日志中间件
+│       ├── logger.go
 │       ├── recovery.go
-│       ├── tracing.go          # OpenTelemetry
+│       ├── tracing.go
 │       └── ratelimit.go
 │
 ├── rpc/                        # gRPC 层（Phase 6 实现，前期为空骨架）
 │   ├── proto/
-│   │   ├── agent.proto
-│   │   ├── privilege.proto
-│   │   └── data.proto
-│   ├── server/                 # gRPC 服务端实现
-│   └── client/                 # gRPC 客户端（服务间调用）
+│   ├── server/
+│   └── client/
 │
-├── agent/                      # tRPC-Agent-Go 层（核心 AI 引擎）
-│   ├── runtime/
-│   │   ├── manager.go          # AgentManager — 生命周期管理
-│   │   └── registry.go         # Agent 注册表
-│   ├── agents/
-│   │   ├── react_agent.go      # React Agent（推理-行动-观察）
-│   │   ├── workflow_agent.go   # Workflow Graph Agent
-│   │   └── assistant_agent.go  # 通用助手 Agent
-│   ├── tools/
-│   │   ├── registry.go         # 工具注册中心（对标 @Tool 注解）
-│   │   ├── agent/              # Agent 相关工具
-│   │   ├── datasource/         # 数据源查询工具
-│   │   └── privilege/          # 权限检查工具
-│   ├── workflows/
-│   │   ├── graph.go            # StateGraph 构建器
-│   │   ├── nodes/              # NL2SQL 工作流节点
-│   │   │   ├── intent.go       # 意图识别
-│   │   │   ├── evidence.go     # 证据召回
-│   │   │   ├── schema.go       # Schema 召回
-│   │   │   ├── planner.go      # 计划生成
-│   │   │   ├── sql_gen.go      # SQL 生成
-│   │   │   ├── python_exec.go  # Python 执行
-│   │   │   └── report.go       # 报告生成
-│   │   └── checkpoint.go       # Redis 状态检查点
-│   ├── memory/
-│   │   ├── short_term.go       # 短期记忆（对话窗口）
-│   │   ├── long_term.go        # 长期记忆（Milvus 向量）
-│   │   └── profile.go          # 用户画像
-│   ├── knowledge/
-│   │   ├── retriever.go        # 混合检索（向量+关键词+RRF）
-│   │   ├── embedding.go        # Embedding 模型代理
-│   │   └── splitter.go         # 文档分割器
-│   └── runner/
-│       ├── runner.go           # Runner — 执行对话管道
-│       ├── sse.go              # SSE 事件流
-│       └── hitl.go             # Human-in-the-Loop
+├── agent/                      # AI Agent 引擎（核心）
+│   ├── runtime/                # Agent 生命周期、注册、初始化
+│   ├── agents/                 # 各类 Agent（React / Workflow / Assistant）
+│   ├── tools/                  # 工具层（按工具类型拆分）
+│   │   ├── function/           # FunctionTool
+│   │   ├── rpc/                # RPC 工具
+│   │   ├── datasource/         # 数据源工具
+│   │   ├── privilege/          # 权限工具
+│   │   ├── web/                # Web 搜索工具
+│   │   └── external/           # 外部系统工具
+│   ├── workflows/              # 工作流（按工作流拆分）
+│   │   ├── nl2sql/
+│   │   │   ├── nodes/
+│   │   │   └── graph.go
+│   │   ├── rag/
+│   │   │   ├── nodes/
+│   │   │   └── graph.go
+│   │   └── kg/
+│   │       ├── nodes/
+│   │       └── graph.go
+│   ├── memory/                 # 记忆系统（短期/长期/画像）
+│   ├── knowledge/              # RAG 检索、Embedding、Splitter
+│   └── runner/                 # 对话管道、SSE、HITL
 │
-├── internal/                   # 业务核心层
-│   ├── domain/                 # 领域层（纯业务规则，零框架依赖）
-│   │   ├── agent/              # 智能体领域
-│   │   ├── datasource/         # 数据源领域
-│   │   ├── chat/               # 对话领域
-│   │   ├── knowledge/          # 知识库领域
-│   │   ├── modelconfig/        # 模型配置领域
-│   │   ├── prompt/             # Prompt 领域
-│   │   ├── semanticmodel/      # 语义模型领域
-│   │   ├── privilege/          # 权限领域
-│   │   ├── platform/           # 平台领域
-│   │   ├── rag/                # RAG 领域
-│   │   └── common/             # 公共领域
-│   ├── service/                # 应用服务层（编排）
-│   │   ├── agent_service.go
-│   │   ├── datasource_service.go
-│   │   ├── chat_service.go
-│   │   ├── knowledge_service.go
-│   │   ├── privilege_service.go
-│   │   ├── platform_service.go
-│   │   └── rag_service.go
-│   ├── dao/                    # 数据访问层
-│   │   ├── db/                 # PostgreSQL (GORM)
-│   │   │   ├── agent_repo.go
-│   │   │   ├── datasource_repo.go
-│   │   │   ├── chat_repo.go
-│   │   │   ├── privilege_repo.go
-│   │   │   ├── platform_repo.go
-│   │   │   └── rag_repo.go
-│   │   ├── cache/              # Redis + BigCache
-│   │   │   ├── agent_cache.go
-│   │   │   ├── privilege_cache.go
-│   │   │   └── bigcache.go
-│   │   ├── queue/              # RabbitMQ + Redis
-│   │   │   ├── producer.go
-│   │   │   └── consumer.go
-│   │   └── external/           # 外部集成
-│   │       ├── milvus.go       # Milvus 向量操作
-│   │       ├── docker_exec.go  # Docker Python 执行器
-│   │       └── oss.go          # 对象存储
+├── internal/                   # 业务核心层（DDD）
+│   ├── domain/                 # 领域层（纯业务规则）
+│   │   ├── agent/
+│   │   ├── datasource/
+│   │   ├── chat/
+│   │   ├── knowledge/
+│   │   ├── modelconfig/
+│   │   ├── prompt/
+│   │   ├── semanticmodel/
+│   │   ├── privilege/
+│   │   ├── platform/
+│   │   ├── rag/
+│   │   └── common/
+│   ├── usecase/                # 用例层（业务编排）
+│   │   ├── agent_usecase.go
+│   │   ├── rag_usecase.go
+│   │   └── datasource_usecase.go
+│   ├── service/                # 应用服务层（对接 handler）
+│   ├── repository/             # 仓储层接口定义
+│   │   ├── agent_repo.go
+│   │   ├── datasource_repo.go
+│   │   └── rag_repo.go
+│   ├── dao/                    # 数据访问层（仓储实现）
+│   │   ├── db/
+│   │   ├── cache/
+│   │   ├── queue/
+│   │   └── external/
 │   ├── event/                  # 领域事件
-│   │   ├── types.go
-│   │   └── handler/
-│   │       ├── agent/
-│   │       ├── chat/
-│   │       └── privilege/
 │   ├── job/                    # 定时任务
-│   │   ├── scheduler.go
-│   │   └── jobs/
-│   ├── model/                  # 数据模型
-│   │   ├── agent_entity.go
-│   │   ├── datasource_entity.go
-│   │   ├── chat_entity.go
-│   │   ├── privilege_entity.go
-│   │   ├── platform_entity.go
-│   │   ├── rag_entity.go
-│   │   ├── agent_dto.go
-│   │   ├── chat_dto.go
-│   │   ├── privilege_dto.go
-│   │   ├── agent_vo.go
-│   │   └── privilege_vo.go
-│   └── config/                 # 配置加载（Viper）
-│       ├── app.go
-│       ├── db.go
-│       ├── redis.go
-│       ├── milvus.go
-│       ├── rabbitmq.go
-│       ├── agent.go
-│       ├── rpc.go
-│       └── monitor.go
+│   ├── model/                  # 数据模型（entity/dto/vo）
+│   └── config/                 # 配置结构体（Viper 映射）
 │
-├── pkg/                        # 基础设施包
-│   ├── logger/                 # Zap 封装
-│   ├── errcode/                # 统一错误码
-│   ├── response/               # 统一响应格式
-│   ├── jwt/                    # JWT 工具
-│   ├── pagination/             # 分页工具
-│   ├── sse/                    # SSE 工具
-│   ├── utils/                  # 通用工具
-│   └── validate/               # 参数校验（go-playground/validator）
+├── infra/                      # 基础设施层
+│   ├── logger/
+│   ├── config/
+│   ├── monitoring/
+│   ├── queue/
+│   ├── cache/
+│   ├── lock/
+│   ├── id/
+│   └── utils/
 │
-├── configs/                    # YAML 配置文件
-│   ├── api.yaml
+├── configs/                    # YAML 配置文件（按服务拆分）
+│   ├── api/
+│   ├── rpc/
+│   ├── agent/
+│   ├── job/
 │   ├── db.yaml
 │   ├── redis.yaml
 │   ├── milvus.yaml
 │   ├── rabbitmq.yaml
-│   ├── agent.yaml
-│   ├── monitor.yaml
-│   └── oss.yaml
+│   └── monitor.yaml
 │
-├── migrations/                 # DDL 迁移（golang-migrate）
+├── migrations/                 # 数据库迁移
 ├── scripts/
 ├── docs/
 ├── Dockerfile
@@ -235,22 +182,43 @@ godata/
 └── go.sum
 ```
 
+### 2.1 分层架构说明
+
+```
+┌─────────────────────────────────────────────┐
+│  api/handler/   ←  HTTP 请求/响应处理         │
+├─────────────────────────────────────────────┤
+│  internal/service/  ← 应用服务（对接 handler）  │
+├─────────────────────────────────────────────┤
+│  internal/usecase/  ← 用例编排（跨领域协调）     │
+├─────────────────────────────────────────────┤
+│  internal/domain/   ← 领域模型 + 业务规则      │
+├─────────────────────────────────────────────┤
+│  internal/repository/  ← 仓储接口（依赖反转）  │
+│  internal/dao/          ← 仓储实现（GORM等）   │
+├─────────────────────────────────────────────┤
+│  agent/   ← AI Agent 引擎（独立于业务层）       │
+├─────────────────────────────────────────────┤
+│  infra/   ← 基础设施（日志/缓存/队列/监控）     │
+└─────────────────────────────────────────────┘
+```
+
 ---
 
 ## 3. Java 模块 → Go 包映射
 
 ```
-phoenix-common-api/core/rest     →  pkg/ + internal/model/common_* + internal/domain/common/
+phoenix-common-api/core/rest     →  infra/ + internal/model/common_* + internal/domain/common/
 phoenix-privilege-api/core/rest  →  internal/domain/privilege/ + api/handler/privilege/ + internal/dao/db/privilege_repo.go
 phoenix-platform-api/core/rest   →  internal/domain/platform/ + api/handler/platform/ + internal/dao/db/platform_repo.go
 phoenix-agent-api/core/rest      →  agent/ + internal/domain/agent/ + api/handler/agent/
-phoenix-data-api/core/rest       →  agent/workflows/ + internal/domain/datasource/ + internal/domain/chat/ + ...
-phoenix-rag-api/core/rest        →  internal/domain/rag/ + agent/knowledge/ + api/handler/rag/
-phoenix-kg-api/core/rest         →  internal/domain/kg/ + api/handler/kg/
-phoenix-tool                     →  pkg/utils/
+phoenix-data-api/core/rest       →  agent/workflows/nl2sql/ + internal/domain/datasource/ + internal/domain/chat/ + ...
+phoenix-rag-api/core/rest        →  internal/domain/rag/ + agent/knowledge/ + agent/workflows/rag/ + api/handler/rag/
+phoenix-kg-api/core/rest         →  internal/domain/kg/ + agent/workflows/kg/ + api/handler/kg/
+phoenix-tool                     →  infra/utils/
 phoenix-codegen                  →  (用不着，Go 没有代码生成器需求)
-phoenix-flink                     →  internal/dao/external/flink.go（降级为外部集成）
-phoenix-admin-manager             →  cmd/api/main.go（统一入口）
+phoenix-flink                    →  internal/dao/external/flink.go（降级为外部集成）
+phoenix-admin-manager            →  cmd/api/main.go（统一入口）
 ```
 
 ---
@@ -279,13 +247,35 @@ type Agent struct {
 func (Agent) TableName() string { return "tbl_data_agent" }
 ```
 
-### 4.2 新增模块使用 golang-migrate
+### 4.2 新增表使用 golang-migrate
 
 ```
 migrations/
 ├── 000001_create_sessions_table.up.sql
 ├── 000001_create_sessions_table.down.sql
 └── ...
+```
+
+### 4.3 Repository 模式（依赖反转）
+
+```go
+// internal/repository/agent_repo.go — 接口
+type AgentRepository interface {
+    FindByID(ctx context.Context, id uint64) (*model.Agent, error)
+    FindBySN(ctx context.Context, sn string) (*model.Agent, error)
+    List(ctx context.Context, query model.AgentPageQuery) ([]*model.Agent, int64, error)
+    Create(ctx context.Context, agent *model.Agent) error
+    Update(ctx context.Context, agent *model.Agent) error
+    Delete(ctx context.Context, id uint64) error
+}
+
+// internal/dao/db/agent_repo.go — GORM 实现
+type agentRepo struct {
+    db *gorm.DB
+}
+func NewAgentRepository(db *gorm.DB) repository.AgentRepository {
+    return &agentRepo{db: db}
+}
 ```
 
 ---
@@ -295,7 +285,7 @@ migrations/
 ### 5.1 响应格式（对标 Java R 类）
 
 ```go
-// pkg/response/response.go
+// infra/response/response.go
 type Response struct {
     Code    int         `json:"code"`
     Message string      `json:"message"`
@@ -332,26 +322,21 @@ func SetupRouter() *gin.Engine {
     api.Use(middleware.RBAC())      // Casbin 权限
 
     {
-        // 智能体管理
         agentGroup := api.Group("/agent")
         agent.RegisterRoutes(agentGroup)
 
-        // 数据源管理
         datasourceGroup := api.Group("/datasource")
         datasource.RegisterRoutes(datasourceGroup)
 
-        // 对话
         chatGroup := api.Group("")
         chat.RegisterRoutes(chatGroup)
 
         // ...其他模块
     }
 
-    // 权限认证（无需 Auth，但需要独立 JWT 校验）
     privilegeGroup := r.Group("/api/privilege")
     privilege.RegisterRoutes(privilegeGroup)
 
-    // 平台管理
     platformGroup := r.Group("/platform")
     platformGroup.Use(middleware.Auth())
     platform.RegisterRoutes(platformGroup)
@@ -363,7 +348,7 @@ func SetupRouter() *gin.Engine {
 ### 5.3 SSE 兼容（对标 WebFlux SSE）
 
 ```go
-// pkg/sse/sse.go
+// infra/sse/sse.go
 func Stream(c *gin.Context, events <-chan Event) {
     c.Writer.Header().Set("Content-Type", "text/event-stream")
     c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -386,7 +371,7 @@ func Stream(c *gin.Context, events <-chan Event) {
 
 ## 6. 分阶段实施计划
 
-### Phase 1 — 基础设施层（pkg/ + configs/ + internal/config/ + cmd/api/）
+### Phase 1 — 基础设施层
 
 **目标**：项目骨架跑通，Gin 启动并响应 `/echo`
 
@@ -394,15 +379,21 @@ func Stream(c *gin.Context, events <-chan Event) {
 |:---|:---|
 | `go.mod` | `module github.com/phoenix-agent-go` |
 | `cmd/api/main.go` | Gin 启动，Viper 加载配置，注册中间件 |
-| `configs/*.yaml` | 全套配置文件 |
-| `pkg/logger/` | Zap 封装，支持日志级别、文件轮转 |
-| `pkg/response/` | 统一 Response / PageResponse |
-| `pkg/errcode/` | 统一错误码定义 |
-| `pkg/jwt/` | JWT 生成/验证 |
-| `pkg/pagination/` | 分页参数解析 |
-| `pkg/sse/` | SSE 流式输出 |
-| `pkg/validate/` | 参数校验封装 |
-| `internal/config/` | Viper 配置加载（db/redis/milvus/rabbitmq/agent/monitor） |
+| `configs/` | api/, rpc/, agent/, job/ 子目录 + db.yaml, redis.yaml, milvus.yaml, rabbitmq.yaml, monitor.yaml |
+| `infra/logger/` | Zap 封装，支持日志级别、文件轮转 |
+| `infra/response/` | 统一 Response / PageResponse |
+| `infra/errcode/` | 统一错误码定义 |
+| `infra/jwt/` | JWT 生成/验证 |
+| `infra/pagination/` | 分页参数解析 |
+| `infra/sse/` | SSE 流式输出 |
+| `infra/validate/` | 参数校验封装 |
+| `infra/config/` | Viper 配置加载入口 |
+| `infra/monitoring/` | OpenTelemetry 初始化 |
+| `infra/queue/` | RabbitMQ + Redis 连接管理 |
+| `infra/cache/` | go-redis + bigcache 初始化 |
+| `infra/lock/` | Redis 分布式锁 |
+| `infra/id/` | Sonyflake ID 生成器 |
+| `internal/config/` | Viper 配置结构体映射（db/redis/milvus/rabbitmq/agent/monitor） |
 | `api/middleware/` | cors, logger, recovery, tracing, auth (骨架) |
 | `api/router.go` | 空路由骨架 |
 | `Dockerfile` | 多阶段构建 |
@@ -418,10 +409,12 @@ func Stream(c *gin.Context, events <-chan Event) {
 | `internal/model/privilege_entity.go` | PrivilegeUser, PrivilegeRole, PrivilegeModule 等 12 张表 |
 | `internal/model/privilege_dto.go` | LoginDTO, UserPageQuery 等 |
 | `internal/domain/privilege/` | 领域规则（密码加密、角色校验） |
-| `internal/dao/db/privilege_repo.go` | GORM CRUD |
+| `internal/repository/privilege_repo.go` | 仓储接口 |
+| `internal/dao/db/privilege_repo.go` | GORM 实现 |
 | `internal/dao/cache/privilege_cache.go` | Redis 权限缓存 + BigCache L1 |
-| `internal/service/privilege_service.go` | LoginService, UserService, RoleService... |
-| `api/handler/privilege/` | LoginController → 12 个 handler |
+| `internal/usecase/privilege_usecase.go` | 用例编排 |
+| `internal/service/privilege_service.go` | 应用服务（对接 handler） |
+| `api/handler/privilege/` | 12 个 handler，对齐所有 Java Controller |
 | `api/middleware/auth.go` | JWT + OAuth2 认证中间件 |
 | `api/middleware/rbac.go` | Casbin RBAC 权限中间件 |
 
@@ -449,12 +442,13 @@ func Stream(c *gin.Context, events <-chan Event) {
 | 交付物 | 映射 Java |
 |:---|:---|
 | `internal/model/platform_entity.go` | GroupInfo, AccountInfo, TenantInfo 等 |
-| `internal/model/common_entity.go` | PlatformInfo (third-party config) |
+| `internal/model/common_entity.go` | PlatformInfo |
 | `internal/domain/platform/` | 平台领域规则 |
 | `internal/dao/db/platform_repo.go` | GORM CRUD |
-| `internal/dao/external/dingtalk.go` | 钉钉 SDK |
-| `internal/dao/external/feishu.go` | 飞书 SDK |
-| `internal/dao/external/wecom.go` | 企业微信 SDK |
+| `internal/dao/external/dingtalk.go` | 钉钉 SDK 封装 |
+| `internal/dao/external/feishu.go` | 飞书 SDK 封装 |
+| `internal/dao/external/wecom.go` | 企业微信 SDK 封装 |
+| `internal/usecase/platform_usecase.go` | 用例编排 |
 | `internal/service/platform_service.go` | 应用服务 |
 | `api/handler/platform/` | GroupAgentInfo, AccountLogin 等 handler |
 | `api/handler/common/` | PlatformInfo, PlatformSync handler |
@@ -466,21 +460,27 @@ func Stream(c *gin.Context, events <-chan Event) {
 | 交付物 | 映射 Java |
 |:---|:---|
 | `agent/runtime/manager.go` | AgentManager |
+| `agent/runtime/registry.go` | Agent 注册表 |
 | `agent/agents/react_agent.go` | ReactAgent |
-| `agent/tools/registry.go` | @Tool 注解扫描 → 显式注册 |
-| `agent/tools/sql_tool.go` | SQL 执行工具 |
-| `agent/tools/knowledge_tool.go` | 知识检索工具 |
-| `agent/tools/mcp_tool.go` | MCP 协议工具 |
+| `agent/agents/workflow_agent.go` | Workflow Graph Agent |
+| `agent/tools/function/` | FunctionTool 注册（对标 @Tool 注解） |
+| `agent/tools/datasource/` | SQL 查询工具 |
+| `agent/tools/rpc/` | RPC 调用工具 |
+| `agent/tools/web/` | Web 搜索工具 |
+| `agent/tools/privilege/` | 权限检查工具 |
+| `agent/tools/external/mcp.go` | MCP 协议工具 |
 | `agent/memory/short_term.go` | 对话窗口管理（Redis checkpoint） |
 | `agent/memory/long_term.go` | Milvus 向量检索记忆 |
 | `agent/memory/profile.go` | 用户画像 |
-| `agent/knowledge/` | 混合检索（向量 + 关键词 + RRF 融合） |
+| `agent/knowledge/retriever.go` | 混合检索（向量 + 关键词 + RRF 融合） |
 | `agent/runner/runner.go` | 对话执行管道 |
 | `agent/runner/sse.go` | SSE 流式输出 |
 | `agent/runner/hitl.go` | Human-in-the-Loop |
 | `internal/model/agent_entity.go` | UserAgentInfo, UserMemoryInfo, CombinedStore |
+| `internal/domain/agent/` | Agent 领域规则 |
 | `internal/dao/db/agent_repo.go` | GORM CRUD |
 | `internal/dao/external/milvus.go` | Milvus 操作封装 |
+| `internal/usecase/agent_usecase.go` | Agent 用例编排 |
 | `internal/service/agent_service.go` | Agent 应用服务 |
 | `api/handler/agent/` | ReactAgentController, HarnessController |
 
@@ -490,18 +490,17 @@ func Stream(c *gin.Context, events <-chan Event) {
 
 | 交付物 | 映射 Java |
 |:---|:---|
-| `agent/workflows/graph.go` | DataAgentConfiguration StateGraph |
-| `agent/workflows/nodes/intent.go` | IntentRecognitionNode |
-| `agent/workflows/nodes/evidence.go` | EvidenceRecallNode |
-| `agent/workflows/nodes/schema.go` | SchemaRecallNode + QueryEnhanceNode + TableRelationNode |
-| `agent/workflows/nodes/planner.go` | PlannerNode + FeasibilityAssessmentNode + PlanExecutorNode |
-| `agent/workflows/nodes/sql_gen.go` | SqlGenerateNode + SemanticConsistencyNode + SqlExecuteNode |
-| `agent/workflows/nodes/python_exec.go` | PythonGenerateNode + PythonExecuteNode + PythonAnalyzeNode |
-| `agent/workflows/nodes/report.go` | ReportGeneratorNode |
-| `agent/workflows/checkpoint.go` | Redis 状态检查点 |
+| `agent/workflows/nl2sql/graph.go` | DataAgentConfiguration StateGraph |
+| `agent/workflows/nl2sql/nodes/intent.go` | IntentRecognitionNode |
+| `agent/workflows/nl2sql/nodes/evidence.go` | EvidenceRecallNode |
+| `agent/workflows/nl2sql/nodes/schema.go` | SchemaRecallNode + QueryEnhanceNode + TableRelationNode |
+| `agent/workflows/nl2sql/nodes/planner.go` | PlannerNode + FeasibilityAssessmentNode + PlanExecutorNode |
+| `agent/workflows/nl2sql/nodes/sql_gen.go` | SqlGenerateNode + SemanticConsistencyNode + SqlExecuteNode |
+| `agent/workflows/nl2sql/nodes/python_exec.go` | PythonGenerateNode + PythonExecuteNode + PythonAnalyzeNode |
+| `agent/workflows/nl2sql/nodes/report.go` | ReportGeneratorNode |
+| `agent/workflows/nl2sql/nodes/checkpoint.go` | Redis 状态检查点 |
 | `internal/domain/datasource/` | 数据源连接管理 |
-| `internal/dao/db/datasource_repo.go` | 多数据库连接器 (MySQL/PG/Oracle/MSSQL/H2/Hive/DM) |
-| `internal/dao/db/ddl_repo.go` | DDL 元数据提取 |
+| `internal/dao/db/ddl_repo.go` | 多数据库 DDL 元数据提取 (MySQL/PG/Oracle/MSSQL/H2/Hive/DM) |
 | `internal/dao/external/docker_exec.go` | Docker Python 执行器 |
 | `internal/domain/chat/` | 对话会话领域 |
 | `internal/model/data_entity.go` | Agent, Datasource, ChatSession, ChatMessage 等 |
@@ -514,69 +513,79 @@ func Stream(c *gin.Context, events <-chan Event) {
 
 ### Phase 6 — 扩展模块 + 部署
 
-**目标**：RAG, KG, Flink, 全量测试, 生产部署
+**目标**：RAG, KG, Flink, gRPC, 全量测试, 生产部署
 
 | 交付物 | 映射 Java |
 |:---|:---|
 | `internal/domain/rag/` | RAG 文件管理 |
+| `agent/workflows/rag/` | RAG 工作流 |
 | `api/handler/rag/` | RagFileInfoController, RagCategoryController |
 | `internal/domain/kg/` | 知识图谱 |
+| `agent/workflows/kg/` | KG 工作流 |
 | `api/handler/kg/` | KG handler |
 | `internal/dao/external/flink.go` | Flink 集成 |
 | `cmd/rpc/main.go` | gRPC 服务启动 |
 | `cmd/agent/main.go` | Agent 独立服务启动 |
 | `cmd/job/main.go` | 定时任务服务启动 |
-| `docker-compose.yaml` | 完整生产环境编排 |
+| `rpc/proto/` | agent.proto, privilege.proto, data.proto |
+| `rpc/server/` + `rpc/client/` | gRPC 服务端 + 客户端 |
 
 ---
 
 ## 7. 关键设计决策
 
-### 7.1 为什么用按模块垂直切分
+### 7.1 DDD 分层：domain → usecase → repository
 
 ```
-internal/
-├── domain/privilege/     ← privilege 模块的领域逻辑
-├── dao/db/privilege_repo.go   ← privilege 模块的数据库访问
-├── dao/cache/privilege_cache.go  ← privilege 模块的缓存
-api/
-├── handler/privilege/    ← privilege 模块的 HTTP handler
+api/handler/          ← HTTP 适配（Gin ctx → DTO → usecase）
+     │
+internal/service/     ← 应用服务（薄层，对接 handler，格式转换）
+     │
+internal/usecase/     ← 用例编排（跨 domain 协调、事务边界、事件发布）
+     │
+internal/domain/      ← 领域核心（纯业务规则、不依赖框架）
+     │
+internal/repository/  ← 接口定义（依赖反转，domain 依赖接口而非实现）
+     │
+internal/dao/         ← 仓储实现（GORM, Redis, Milvus, RabbitMQ）
 ```
 
-每个模块在每一层都有自己的文件/目录，**水平分层 + 垂直模块**。新增模块只需在每层加一个目录。
+**为什么不直接用 service 调 dao？** 加上 usecase 和 repository 两层之后：
+- `repository` 接口让 domain 不依赖 GORM，可单独测试
+- `usecase` 处理跨领域编排，service 只管格式转换，职责清晰
+- 对标 Java 中 Service 的 `@Transactional` 编排逻辑，usecase 是事务边界
 
-### 7.2 并发模型：Handler → Service → DAO 全链路 ctx 传递
+### 7.2 并发模型：Handler → Usecase → Repository 全链路 ctx 传递
 
 ```go
 func (h *AgentHandler) GetAgent(c *gin.Context) {
-    ctx := c.Request.Context()  // 来自 Gin 的 context
-    agent, err := h.service.GetAgent(ctx, id)
+    ctx := c.Request.Context()
+    agent, err := h.usecase.GetAgent(ctx, id)
 }
 
-func (s *AgentService) GetAgent(ctx context.Context, id uint64) (*model.Agent, error) {
+func (u *AgentUsecase) GetAgent(ctx context.Context, id uint64) (*model.Agent, error) {
     // 先查 BigCache L1
-    if cached := s.cache.Get(ctx, id); cached != nil { return cached, nil }
-    // 再查 GORM
-    agent, err := s.repo.FindByID(ctx, id)
+    if cached := u.cache.Get(ctx, id); cached != nil { return cached, nil }
+    // 再查 Repository（GORM）
+    agent, err := u.repo.FindByID(ctx, id)
     // 写回 L1
-    s.cache.Set(ctx, id, agent)
+    u.cache.Set(ctx, id, agent)
     return agent, err
 }
 ```
 
-Gin 天然每请求一个 goroutine，无需 WebFlux reactive，代码直观。
+Gin 天然每请求一个 goroutine，无需 WebFlux reactive。
 
 ### 7.3 事务管理
 
-Go 没有 `@Transactional` 注解，通过 `db.Transaction()` 显式管理：
+事务边界放在 usecase 层，通过 `db.Transaction()` 显式管理：
 
 ```go
-func (s *AgentService) CreateAgent(ctx context.Context, dto CreateAgentDTO) (*model.Agent, error) {
+func (u *AgentUsecase) CreateAgent(ctx context.Context, dto CreateAgentDTO) (*model.Agent, error) {
     var agent *model.Agent
-    err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+    err := u.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
         agent = dto.ToEntity()
         if err := tx.Create(agent).Error; err != nil { return err }
-        // 同时创建默认数据源
         ds := dto.ToDefaultDatasource(agent.ID)
         return tx.Create(ds).Error
     })
@@ -586,10 +595,10 @@ func (s *AgentService) CreateAgent(ctx context.Context, dto CreateAgentDTO) (*mo
 
 ### 7.4 错误处理
 
-统一错误码，不使用 exception。对标 Java 的 BizException / GlobalExceptionHandler：
+统一错误码，对标 Java 的 BizException / GlobalExceptionHandler：
 
 ```go
-// pkg/errcode/errcode.go
+// infra/errcode/errcode.go
 type ErrCode struct {
     Code int
     Msg  string
@@ -611,10 +620,10 @@ var (
 
 ### 7.5 配置管理
 
-YAML 文件分离，Viper 合并加载：
+YAML 按服务拆分目录，共享配置平级放置，Viper 合并加载：
 
 ```yaml
-# configs/db.yaml
+# configs/db.yaml (所有服务共享)
 database:
   host: "127.0.0.1"
   port: 5432
@@ -625,19 +634,18 @@ database:
   max_open_conns: 25
   max_idle_conns: 10
 
-# configs/redis.yaml
+# configs/redis.yaml (所有服务共享)
 redis:
   addr: "127.0.0.1:6379"
   password: ""
   db: 0
 
-# configs/milvus.yaml
-milvus:
-  addr: "127.0.0.1:19530"
-  collection: "phoenix_vectors"
-  dim: 512
+# configs/api/app.yaml (API 服务专用)
+server:
+  port: 8066
+  mode: debug
 
-# configs/agent.yaml
+# configs/agent/app.yaml (Agent 服务专用)
 agent:
   model:
     provider: "deepseek"
@@ -648,13 +656,28 @@ agent:
   max_tokens: 4096
 ```
 
+### 7.6 Agent 层独立于 business 层
+
+```
+agent/                ← 纯 AI 引擎，依赖 tRPC-Agent-Go
+    可独立编译、部署为 cmd/agent
+    不 import internal/ 的任何包
+
+internal/             ← 业务逻辑，通过接口调用 agent 层
+    通过 agent 层的接口（AgentManager, ToolRegistry）
+    注入给 ai handler
+```
+
+依赖方向：`api → internal → agent ← infra`（internal 和 agent 都依赖 infra，但互相不依赖）
+
 ---
 
 ## 8. 部署架构
 
 ```
 docker-compose.yaml
-├── phoenix-go (Gin API, :8066)
+├── phoenix-api (Gin, :8066)    — 来自 cmd/api
+├── phoenix-agent (:8090)       — 来自 cmd/agent（可选独立部署）
 ├── postgres (:5432) + pgvector
 ├── redis (:6379)
 ├── milvus-standalone (:19530, :9091)
@@ -675,7 +698,7 @@ RUN CGO_ENABLED=0 go build -o /phoenix-api ./cmd/api
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata python3 py3-pip
 COPY --from=builder /phoenix-api /usr/local/bin/
-COPY configs/ /etc/phoenix/
+COPY configs/ /etc/phoenix/configs/
 EXPOSE 8066
 CMD ["phoenix-api"]
 ```
