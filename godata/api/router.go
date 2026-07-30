@@ -314,7 +314,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		dataAPI.POST("/sessions/:id/reports/html", chatHandler.GenerateReportHTML)
 
 		// ---- Graph Search (SSE) ----
-		graphHandler := chat.NewGraphHandler(dataSvc)
+		graphHandler := chat.NewGraphHandler(dataSvc, nil, nil)
 		dataAPI.GET("/stream/search", graphHandler.StreamSearch)
 
 		// ---- Session Events (SSE) ----

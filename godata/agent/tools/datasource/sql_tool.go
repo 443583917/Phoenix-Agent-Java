@@ -109,6 +109,13 @@ func (m *DatasourceManager) get(name string) (*sql.DB, error) {
 	return db, nil
 }
 
+// QueryRows executes a read-only SELECT query against a named datasource.
+// This is the exported version of queryRows, provided for programmatic
+// access from graph nodes and other internal components.
+func (m *DatasourceManager) QueryRows(ctx context.Context, datasourceName, rawSQL string) (*QueryResult, error) {
+	return m.queryRows(ctx, datasourceName, rawSQL)
+}
+
 // ListNames returns all registered datasource names.
 func (m *DatasourceManager) ListNames() []string {
 	m.mu.RLock()
