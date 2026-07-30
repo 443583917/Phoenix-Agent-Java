@@ -11,12 +11,14 @@ import (
 	"github.com/phoenix-agent-go/api/handler/chat"
 	"github.com/phoenix-agent-go/api/handler/common"
 	datasourceHandler "github.com/phoenix-agent-go/api/handler/datasource"
+	kgHandler "github.com/phoenix-agent-go/api/handler/kg"
 	knowledgeHandler "github.com/phoenix-agent-go/api/handler/knowledge"
 	"github.com/phoenix-agent-go/api/handler/modelconfig"
 	"github.com/phoenix-agent-go/api/handler/platform"
-	"github.com/phoenix-agent-go/api/handler/prompt"
-	semanticmodelHandler "github.com/phoenix-agent-go/api/handler/semanticmodel"
 	"github.com/phoenix-agent-go/api/handler/privilege"
+	"github.com/phoenix-agent-go/api/handler/prompt"
+	ragHandler "github.com/phoenix-agent-go/api/handler/rag"
+	semanticmodelHandler "github.com/phoenix-agent-go/api/handler/semanticmodel"
 	"github.com/phoenix-agent-go/api/middleware"
 	"github.com/phoenix-agent-go/infra/config"
 	"github.com/phoenix-agent-go/infra/jwt"
@@ -24,7 +26,7 @@ import (
 	"github.com/phoenix-agent-go/internal/service"
 )
 
-func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService, dataSvc *service.DataService, agentManager *runtime.AgentManager, hitlHandler *runner.HitlHandler) *gin.Engine {
+func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService, dataSvc *service.DataService, ragSvc *service.RagService, kgSvc *service.KgService, agentManager *runtime.AgentManager, hitlHandler *runner.HitlHandler) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -526,6 +528,78 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			sync.POST("/all", syncHandler.SyncAll)
 			sync.POST("/departments", syncHandler.SyncDepartments)
 			sync.POST("/users", syncHandler.SyncUsers)
+		}
+	}
+
+	// ================ RAG 路由 ================
+	ragAPI := r.Group("/api/rag")
+	ragAPI.Use(middleware.Auth(jwtManager))
+	ragAPI.Use(middleware.RBAC(enforcer))
+	if ragSvc != nil {
+		// ---- RAG File ----
+		ragFileHandler := ragHandler.NewRagFileInfoHandler(ragSvc)
+		ragFileGroup := ragAPI.Group("/file")
+		{
+			ragFileGroup.GET("/page", ragFileHandler.Page)
+			ragFileGroup.GET("/list", ragFileHandler.List)
+			ragFileGroup.GET("/:id", ragFileHandler.GetByID)
+			ragFileGroup.POST("", ragFileHandler.Create)
+			ragFileGroup.PUT("", ragFileHandler.Update)
+			ragFileGroup.DELETE("/:id", ragFileHandler.Delete)
+		}
+
+		// ---- RAG Category ----
+		ragCategoryHandler := ragHandler.NewRagCategoryHandler(ragSvc)
+		ragCategoryGroup := ragAPI.Group("/category")
+		{
+			ragCategoryGroup.GET("/page", ragCategoryHandler.Page)
+			ragCategoryGroup.GET("/list", ragCategoryHandler.List)
+			ragCategoryGroup.GET("/:id", ragCategoryHandler.GetByID)
+			ragCategoryGroup.POST("", ragCategoryHandler.Create)
+			ragCategoryGroup.PUT("", ragCategoryHandler.Update)
+			ragCategoryGroup.DELETE("/:id", ragCategoryHandler.Delete)
+		}
+	}
+
+	// ================ KG 路由 ================
+	kgAPI := r.Group("/api/kg")
+	kgAPI.Use(middleware.Auth(jwtManager))
+	kgAPI.Use(middleware.RBAC(enforcer))
+	if kgSvc != nil {
+		// ---- KG Entity ----
+		kgEntityHandler := kgHandler.NewKGEntityHandler(kgSvc)
+		kgEntityGroup := kgAPI.Group("/entity")
+		{
+			kgEntityGroup.GET("/page", kgEntityHandler.Page)
+			kgEntityGroup.GET("/list", kgEntityHandler.List)
+			kgEntityGroup.GET("/:id", kgEntityHandler.GetByID)
+			kgEntityGroup.POST("", kgEntityHandler.Create)
+			kgEntityGroup.PUT("", kgEntityHandler.Update)
+			kgEntityGroup.DELETE("/:id", kgEntityHandler.Delete)
+		}
+
+		// ---- KG Relation ----
+		kgRelationHandler := kgHandler.NewKGRelationHandler(kgSvc)
+		kgRelationGroup := kgAPI.Group("/relation")
+		{
+			kgRelationGroup.GET("/page", kgRelationHandler.Page)
+			kgRelationGroup.GET("/:id", kgRelationHandler.GetByID)
+			kgRelationGroup.GET("/by-entity/:entityId", kgRelationHandler.FindByEntity)
+			kgRelationGroup.POST("", kgRelationHandler.Create)
+			kgRelationGroup.PUT("", kgRelationHandler.Update)
+			kgRelationGroup.DELETE("/:id", kgRelationHandler.Delete)
+		}
+
+		// ---- KG Domain ----
+		kgDomainHandler := kgHandler.NewKGDomainHandler(kgSvc)
+		kgDomainGroup := kgAPI.Group("/domain")
+		{
+			kgDomainGroup.GET("/page", kgDomainHandler.Page)
+			kgDomainGroup.GET("/list", kgDomainHandler.List)
+			kgDomainGroup.GET("/:id", kgDomainHandler.GetByID)
+			kgDomainGroup.POST("", kgDomainHandler.Create)
+			kgDomainGroup.PUT("", kgDomainHandler.Update)
+			kgDomainGroup.DELETE("/:id", kgDomainHandler.Delete)
 		}
 	}
 

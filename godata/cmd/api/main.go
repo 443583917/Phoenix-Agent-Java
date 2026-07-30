@@ -78,14 +78,18 @@ func main() {
 	// 初始化数据库
 	database := initDB(&cfg.DB)
 
-	// 构建特权模块依赖链
+	// 构建依赖链
 	var privilegeSvc *service.PrivilegeService
 	var platformSvc *service.PlatformService
 	var dataSvc *service.DataService
+	var ragSvc *service.RagService
+	var kgSvc *service.KgService
 	if database != nil {
 		privilegeSvc = buildPrivilegeService(database, cfg)
 		platformSvc = buildPlatformService(database)
 		dataSvc = buildDataService(database)
+		ragSvc = buildRagService(database)
+		kgSvc = buildKgService(database)
 	} else {
 		zap.L().Warn("database unavailable, privilege and platform endpoints will return errors")
 	}
@@ -95,7 +99,7 @@ func main() {
 	hitlHandler := runner.NewHitlHandler()
 
 	// 设置路由
-	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc, dataSvc, agentManager, hitlHandler)
+	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc, dataSvc, ragSvc, kgSvc, agentManager, hitlHandler)
 
 	// 启动服务
 	srv := &http.Server{
@@ -223,6 +227,29 @@ func buildDataService(database *gorm.DB) *service.DataService {
 	)
 
 	return service.NewDataService(uc)
+}
+
+// buildRagService constructs the RAG dependency chain:
+// repos → usecase → service.
+func buildRagService(database *gorm.DB) *service.RagService {
+	categoryRepo := db.NewRagCategoryRepository(database)
+	fileRepo := db.NewRagFileInfoRepository(database)
+
+	uc := usecase.NewRagUsecase(categoryRepo, fileRepo)
+
+	return service.NewRagService(uc)
+}
+
+// buildKgService constructs the KG dependency chain:
+// repos → usecase → service.
+func buildKgService(database *gorm.DB) *service.KgService {
+	entityRepo := db.NewKGEntityRepository(database)
+	relationRepo := db.NewKGRelationRepository(database)
+	domainRepo := db.NewKGDomainRepository(database)
+
+	uc := usecase.NewKgUsecase(entityRepo, relationRepo, domainRepo)
+
+	return service.NewKgService(uc)
 }
 
 // buildPrivilegeService constructs the full privilege dependency chain:
