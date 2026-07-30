@@ -24,9 +24,10 @@ import (
 	"github.com/phoenix-agent-go/infra/jwt"
 	"github.com/phoenix-agent-go/infra/response"
 	"github.com/phoenix-agent-go/internal/service"
+	"github.com/redis/go-redis/v9"
 )
 
-func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService, dataSvc *service.DataService, ragSvc *service.RagService, kgSvc *service.KgService, agentManager *runtime.AgentManager, hitlHandler *runner.HitlHandler) *gin.Engine {
+func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService, dataSvc *service.DataService, ragSvc *service.RagService, kgSvc *service.KgService, agentManager *runtime.AgentManager, hitlHandler *runner.HitlHandler, rdb *redis.Client) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -48,7 +49,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 	r.Static("/api/upload", "./storage/upload")
 
 	// 认证路由（无需 JWT）
-	authHandler := privilege.NewAuthHandler(privilegeSvc, jwtManager)
+	authHandler := privilege.NewAuthHandler(privilegeSvc, jwtManager, rdb)
 	auth := r.Group("/api/privilege/auth")
 	auth.Use(middleware.RateLimit())
 	auth.GET("/captcha", authHandler.Captcha)

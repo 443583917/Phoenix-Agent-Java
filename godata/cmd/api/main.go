@@ -138,7 +138,7 @@ func main() {
 	hitlHandler := runner.NewHitlHandler()
 
 	// 设置路由
-	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc, dataSvc, ragSvc, kgSvc, agentManager, hitlHandler)
+	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc, dataSvc, ragSvc, kgSvc, agentManager, hitlHandler, redisClient)
 
 	// 启动服务
 	srv := &http.Server{
@@ -338,10 +338,22 @@ func buildDataService(database *gorm.DB) *service.DataService {
 	agentKnowledgeRepo := db.NewAgentKnowledgeRepository(database)
 	agentPresetQuestionRepo := db.NewAgentPresetQuestionRepository(database)
 	agentDatasourceTablesRepo := db.NewAgentDatasourceTablesRepository(database)
+	chatSessionRepo := db.NewChatSessionRepository(database)
+	chatMessageRepo := db.NewChatMessageRepository(database)
+	datasourceRepo := db.NewDatasourceRepository(database)
+	logicalRelationRepo := db.NewLogicalRelationRepository(database)
+	modelConfigRepo := db.NewModelConfigRepository(database)
+	userPromptConfigRepo := db.NewUserPromptConfigRepository(database)
+	semanticModelRepo := db.NewSemanticModelRepository(database)
+	businessKnowledgeRepo := db.NewBusinessKnowledgeRepository(database)
+	dsAccessor := db.NewDatasourceAccessor()
 
 	uc := usecase.NewDataUsecase(
 		agentRepo, agentCategoryRepo, agentDatasourceRepo,
 		agentKnowledgeRepo, agentPresetQuestionRepo, agentDatasourceTablesRepo,
+		chatSessionRepo, chatMessageRepo, datasourceRepo,
+		logicalRelationRepo, modelConfigRepo, userPromptConfigRepo,
+		semanticModelRepo, businessKnowledgeRepo, dsAccessor,
 	)
 
 	return service.NewDataService(uc)

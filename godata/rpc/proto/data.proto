@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package rpc;
+
+option go_package = "github.com/phoenix-agent-go/rpc/proto";
+
+service DataService {
+  rpc Chat(ChatRequest) returns (stream ChatResponse);
+  rpc GetDatasource(GetDatasourceRequest) returns (GetDatasourceResponse);
+}
+
+message ChatRequest {
+  string session_id = 1;
+  string message = 2;
+  string agent_id = 3;
+}
+
+message ChatResponse {
+  string content = 1;
+  string event_type = 2;
+  bool done = 3;
+}
+
+message GetDatasourceRequest {
+  string id = 1;
+}
+
+message GetDatasourceResponse {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  string status = 4;
+}

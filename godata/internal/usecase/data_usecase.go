@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 
 	"github.com/phoenix-agent-go/internal/model"
@@ -11,25 +12,37 @@ import (
 	"github.com/phoenix-agent-go/infra/id"
 )
 
-// ──────────────────────────── Data Errors ────────────────────────────
-
 var (
-	ErrAgentNotFound             = &AppError{Code: 601001, Msg: "智能体不存在"}
-	ErrAgentCategoryNotFound     = &AppError{Code: 602001, Msg: "分类不存在"}
-	ErrAgentDatasourceNotFound   = &AppError{Code: 603001, Msg: "智能体数据源关联不存在"}
-	ErrAgentKnowledgeNotFound    = &AppError{Code: 604001, Msg: "知识库条目不存在"}
-	ErrAgentPresetQuestionNotFound = &AppError{Code: 605001, Msg: "预设问题不存在"}
+	ErrAgentNotFound                 = &AppError{Code: 601001, Msg: "智能体不存在"}
+	ErrAgentCategoryNotFound         = &AppError{Code: 602001, Msg: "分类不存在"}
+	ErrAgentDatasourceNotFound       = &AppError{Code: 603001, Msg: "智能体数据源关联不存在"}
+	ErrAgentKnowledgeNotFound        = &AppError{Code: 604001, Msg: "知识库条目不存在"}
+	ErrAgentPresetQuestionNotFound   = &AppError{Code: 605001, Msg: "预设问题不存在"}
+	ErrChatSessionNotFound           = &AppError{Code: 606001, Msg: "会话不存在"}
+	ErrDatasourceNotFound            = &AppError{Code: 607001, Msg: "数据源不存在"}
+	ErrLogicalRelationNotFound       = &AppError{Code: 608001, Msg: "逻辑关系不存在"}
+	ErrModelConfigNotFound           = &AppError{Code: 609001, Msg: "模型配置不存在"}
+	ErrPromptConfigNotFound          = &AppError{Code: 610001, Msg: "Prompt配置不存在"}
+	ErrSemanticModelNotFound         = &AppError{Code: 611001, Msg: "语义模型不存在"}
+	ErrBusinessKnowledgeNotFound     = &AppError{Code: 612001, Msg: "业务知识不存在"}
 )
 
-// ──────────────────────────── DataUsecase ────────────────────────────
-
 type DataUsecase struct {
-	agentRepo               repository.AgentRepository
-	agentCategoryRepo       repository.AgentCategoryRepository
-	agentDatasourceRepo     repository.AgentDatasourceRepository
-	agentKnowledgeRepo      repository.AgentKnowledgeRepository
-	agentPresetQuestionRepo repository.AgentPresetQuestionRepository
+	agentRepo                 repository.AgentRepository
+	agentCategoryRepo         repository.AgentCategoryRepository
+	agentDatasourceRepo       repository.AgentDatasourceRepository
+	agentKnowledgeRepo        repository.AgentKnowledgeRepository
+	agentPresetQuestionRepo   repository.AgentPresetQuestionRepository
 	agentDatasourceTablesRepo repository.AgentDatasourceTablesRepository
+	chatSessionRepo           repository.ChatSessionRepository
+	chatMessageRepo           repository.ChatMessageRepository
+	datasourceRepo            repository.DatasourceRepository
+	logicalRelationRepo       repository.LogicalRelationRepository
+	modelConfigRepo           repository.ModelConfigRepository
+	userPromptConfigRepo      repository.UserPromptConfigRepository
+	semanticModelRepo         repository.SemanticModelRepository
+	businessKnowledgeRepo     repository.BusinessKnowledgeRepository
+	dsAccessor                repository.DatasourceAccessor
 }
 
 func NewDataUsecase(
@@ -39,14 +52,32 @@ func NewDataUsecase(
 	agentKnowledgeRepo repository.AgentKnowledgeRepository,
 	agentPresetQuestionRepo repository.AgentPresetQuestionRepository,
 	agentDatasourceTablesRepo repository.AgentDatasourceTablesRepository,
+	chatSessionRepo repository.ChatSessionRepository,
+	chatMessageRepo repository.ChatMessageRepository,
+	datasourceRepo repository.DatasourceRepository,
+	logicalRelationRepo repository.LogicalRelationRepository,
+	modelConfigRepo repository.ModelConfigRepository,
+	userPromptConfigRepo repository.UserPromptConfigRepository,
+	semanticModelRepo repository.SemanticModelRepository,
+	businessKnowledgeRepo repository.BusinessKnowledgeRepository,
+	dsAccessor repository.DatasourceAccessor,
 ) *DataUsecase {
 	return &DataUsecase{
-		agentRepo:               agentRepo,
-		agentCategoryRepo:       agentCategoryRepo,
-		agentDatasourceRepo:     agentDatasourceRepo,
-		agentKnowledgeRepo:      agentKnowledgeRepo,
-		agentPresetQuestionRepo: agentPresetQuestionRepo,
+		agentRepo:                 agentRepo,
+		agentCategoryRepo:         agentCategoryRepo,
+		agentDatasourceRepo:       agentDatasourceRepo,
+		agentKnowledgeRepo:        agentKnowledgeRepo,
+		agentPresetQuestionRepo:   agentPresetQuestionRepo,
 		agentDatasourceTablesRepo: agentDatasourceTablesRepo,
+		chatSessionRepo:           chatSessionRepo,
+		chatMessageRepo:           chatMessageRepo,
+		datasourceRepo:            datasourceRepo,
+		logicalRelationRepo:       logicalRelationRepo,
+		modelConfigRepo:           modelConfigRepo,
+		userPromptConfigRepo:      userPromptConfigRepo,
+		semanticModelRepo:         semanticModelRepo,
+		businessKnowledgeRepo:     businessKnowledgeRepo,
+		dsAccessor:                dsAccessor,
 	}
 }
 
@@ -527,4 +558,495 @@ func (u *DataUsecase) GetAgentPresetQuestionByID(ctx context.Context, id string)
 
 func (u *DataUsecase) PageAgentPresetQuestion(ctx context.Context, page, size int, query *model.AgentPresetQuestion) ([]*model.AgentPresetQuestion, int64, error) {
 	return u.agentPresetQuestionRepo.Page(ctx, page, size, query)
+}
+
+// ──────────────────────────── ChatSession ────────────────────────────
+
+func (u *DataUsecase) ListChatSessions(ctx context.Context, agentID int, userID string) ([]*model.ChatSession, error) {
+	return u.chatSessionRepo.FindByAgentIDAndUserID(ctx, agentID, userID)
+}
+
+func (u *DataUsecase) CreateChatSession(ctx context.Context, entity *model.ChatSession) (*model.ChatSession, error) {
+	entity.ID = dataGenID()
+	if entity.Status == "" {
+		entity.Status = "active"
+	}
+	if err := u.chatSessionRepo.Create(ctx, entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) DeleteAllSessions(ctx context.Context, agentID int) error {
+	return u.chatSessionRepo.DeleteByAgentID(ctx, agentID)
+}
+
+func (u *DataUsecase) DeleteSession(ctx context.Context, id string) error {
+	existing, err := u.chatSessionRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrChatSessionNotFound
+	}
+	return u.chatSessionRepo.Delete(ctx, id)
+}
+
+func (u *DataUsecase) PinSession(ctx context.Context, id string, isPinned bool) error {
+	existing, err := u.chatSessionRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrChatSessionNotFound
+	}
+	existing.IsPinned = isPinned
+	return u.chatSessionRepo.Update(ctx, existing)
+}
+
+func (u *DataUsecase) RenameSession(ctx context.Context, id string, title string) error {
+	existing, err := u.chatSessionRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrChatSessionNotFound
+	}
+	existing.Title = title
+	return u.chatSessionRepo.Update(ctx, existing)
+}
+
+// ──────────────────────────── ChatMessage ────────────────────────────
+
+func (u *DataUsecase) GetSessionMessages(ctx context.Context, sessionID string) ([]*model.ChatMessage, error) {
+	return u.chatMessageRepo.FindBySessionID(ctx, sessionID)
+}
+
+func (u *DataUsecase) AddChatMessage(ctx context.Context, entity *model.ChatMessage) (*model.ChatMessage, error) {
+	entity.ID = dataGenID()
+	if err := u.chatMessageRepo.Create(ctx, entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+// ──────────────────────────── Datasource ────────────────────────────
+
+func (u *DataUsecase) PageDatasource(ctx context.Context, page, size int, query *model.Datasource) ([]*model.Datasource, int64, error) {
+	return u.datasourceRepo.Page(ctx, page, size, query)
+}
+
+func (u *DataUsecase) GetDatasourceByID(ctx context.Context, id string) (*model.Datasource, error) {
+	entity, err := u.datasourceRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if entity == nil {
+		return nil, ErrDatasourceNotFound
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) CreateDatasource(ctx context.Context, entity *model.Datasource) (*model.Datasource, error) {
+	entity.ID = dataGenID()
+	if entity.Status == "" {
+		entity.Status = "active"
+	}
+	if err := u.datasourceRepo.Create(ctx, entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) UpdateDatasource(ctx context.Context, entity *model.Datasource) error {
+	existing, err := u.datasourceRepo.FindByID(ctx, entity.ID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrDatasourceNotFound
+	}
+	return u.datasourceRepo.Update(ctx, entity)
+}
+
+func (u *DataUsecase) DeleteDatasource(ctx context.Context, id string) error {
+	existing, err := u.datasourceRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrDatasourceNotFound
+	}
+	return u.datasourceRepo.Delete(ctx, id)
+}
+
+func (u *DataUsecase) TestDatasourceConnection(ctx context.Context, id string) error {
+	ds, err := u.datasourceRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if ds == nil {
+		return ErrDatasourceNotFound
+	}
+	if u.dsAccessor == nil {
+		return fmt.Errorf("datasource accessor not configured")
+	}
+	return u.dsAccessor.TestConnection(ds)
+}
+
+func (u *DataUsecase) GetDatasourceTables(ctx context.Context, id string) (interface{}, error) {
+	ds, err := u.datasourceRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if ds == nil {
+		return nil, ErrDatasourceNotFound
+	}
+	if u.dsAccessor == nil {
+		return nil, fmt.Errorf("datasource accessor not configured")
+	}
+	return u.dsAccessor.GetTables(ds)
+}
+
+func (u *DataUsecase) GetDatasourceColumns(ctx context.Context, id string, tableName string) (interface{}, error) {
+	ds, err := u.datasourceRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if ds == nil {
+		return nil, ErrDatasourceNotFound
+	}
+	if u.dsAccessor == nil {
+		return nil, fmt.Errorf("datasource accessor not configured")
+	}
+	return u.dsAccessor.GetColumns(ds, tableName)
+}
+
+// ──────────────────────────── LogicalRelation ────────────────────────────
+
+func (u *DataUsecase) ListLogicalRelations(ctx context.Context, datasourceID int) ([]*model.LogicalRelation, error) {
+	return u.logicalRelationRepo.FindByDatasourceID(ctx, datasourceID)
+}
+
+func (u *DataUsecase) CreateLogicalRelation(ctx context.Context, entity *model.LogicalRelation) (*model.LogicalRelation, error) {
+	entity.ID = dataGenID()
+	if err := u.logicalRelationRepo.Create(ctx, entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) UpdateLogicalRelations(ctx context.Context, datasourceID int, relations []*model.LogicalRelation) error {
+	if err := u.logicalRelationRepo.DeleteByDatasourceID(ctx, datasourceID); err != nil {
+		return err
+	}
+	for _, rel := range relations {
+		rel.ID = dataGenID()
+		rel.DatasourceId = datasourceID
+		if err := u.logicalRelationRepo.Create(ctx, rel); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (u *DataUsecase) DeleteLogicalRelations(ctx context.Context, datasourceID int) error {
+	return u.logicalRelationRepo.DeleteByDatasourceID(ctx, datasourceID)
+}
+
+// ──────────────────────────── ModelConfig ────────────────────────────
+
+func (u *DataUsecase) PageModelConfig(ctx context.Context, page, size int) ([]*model.ModelConfig, int64, error) {
+	return u.modelConfigRepo.Page(ctx, page, size)
+}
+
+func (u *DataUsecase) CreateModelConfig(ctx context.Context, entity *model.ModelConfig) (*model.ModelConfig, error) {
+	entity.ID = dataGenID()
+	if err := u.modelConfigRepo.Create(ctx, entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) UpdateModelConfig(ctx context.Context, entity *model.ModelConfig) error {
+	existing, err := u.modelConfigRepo.FindByID(ctx, entity.ID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrModelConfigNotFound
+	}
+	return u.modelConfigRepo.Update(ctx, entity)
+}
+
+func (u *DataUsecase) DeleteModelConfig(ctx context.Context, id string) error {
+	existing, err := u.modelConfigRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrModelConfigNotFound
+	}
+	return u.modelConfigRepo.Delete(ctx, id)
+}
+
+func (u *DataUsecase) ActivateModelConfig(ctx context.Context, id string) error {
+	existing, err := u.modelConfigRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrModelConfigNotFound
+	}
+	if err := u.modelConfigRepo.DeactivateAll(ctx); err != nil {
+		return err
+	}
+	existing.IsActive = true
+	return u.modelConfigRepo.Update(ctx, existing)
+}
+
+func (u *DataUsecase) CheckModelConfigReady(ctx context.Context) (bool, error) {
+	active, err := u.modelConfigRepo.FindActive(ctx)
+	if err != nil {
+		return false, err
+	}
+	return active != nil, nil
+}
+
+// ──────────────────────────── UserPromptConfig ────────────────────────────
+
+func (u *DataUsecase) PagePromptConfig(ctx context.Context, page, size int, promptType string) ([]*model.UserPromptConfig, int64, error) {
+	return u.userPromptConfigRepo.Page(ctx, page, size, promptType)
+}
+
+func (u *DataUsecase) GetPromptConfigByID(ctx context.Context, id string) (*model.UserPromptConfig, error) {
+	entity, err := u.userPromptConfigRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if entity == nil {
+		return nil, ErrPromptConfigNotFound
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) SavePromptConfig(ctx context.Context, entity *model.UserPromptConfig) (*model.UserPromptConfig, error) {
+	if entity.ID == "" {
+		entity.ID = dataGenID()
+		if err := u.userPromptConfigRepo.Create(ctx, entity); err != nil {
+			return nil, err
+		}
+		return entity, nil
+	}
+	if err := u.userPromptConfigRepo.Update(ctx, entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) ListPromptConfigByType(ctx context.Context, promptType string, page, size int) ([]*model.UserPromptConfig, int64, error) {
+	return u.userPromptConfigRepo.Page(ctx, page, size, promptType)
+}
+
+func (u *DataUsecase) GetActivePromptConfigByType(ctx context.Context, promptType string) (*model.UserPromptConfig, error) {
+	return u.userPromptConfigRepo.FindActiveByType(ctx, promptType)
+}
+
+func (u *DataUsecase) GetActiveAllPromptConfigByType(ctx context.Context, promptType string) ([]*model.UserPromptConfig, error) {
+	return u.userPromptConfigRepo.FindActiveAllByType(ctx, promptType)
+}
+
+func (u *DataUsecase) DeletePromptConfig(ctx context.Context, id string) error {
+	existing, err := u.userPromptConfigRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrPromptConfigNotFound
+	}
+	return u.userPromptConfigRepo.Delete(ctx, id)
+}
+
+func (u *DataUsecase) EnablePromptConfig(ctx context.Context, id string) error {
+	existing, err := u.userPromptConfigRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrPromptConfigNotFound
+	}
+	existing.Enabled = true
+	return u.userPromptConfigRepo.Update(ctx, existing)
+}
+
+func (u *DataUsecase) DisablePromptConfig(ctx context.Context, id string) error {
+	existing, err := u.userPromptConfigRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrPromptConfigNotFound
+	}
+	existing.Enabled = false
+	return u.userPromptConfigRepo.Update(ctx, existing)
+}
+
+func (u *DataUsecase) BatchEnablePromptConfig(ctx context.Context, ids []string) error {
+	return u.userPromptConfigRepo.BatchUpdate(ctx, ids, map[string]interface{}{"enabled": true})
+}
+
+func (u *DataUsecase) BatchDisablePromptConfig(ctx context.Context, ids []string) error {
+	return u.userPromptConfigRepo.BatchUpdate(ctx, ids, map[string]interface{}{"enabled": false})
+}
+
+func (u *DataUsecase) SetPromptConfigPriority(ctx context.Context, id string, priority int) error {
+	existing, err := u.userPromptConfigRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrPromptConfigNotFound
+	}
+	existing.Priority = priority
+	return u.userPromptConfigRepo.Update(ctx, existing)
+}
+
+func (u *DataUsecase) SetPromptConfigDisplayOrder(ctx context.Context, id string, displayOrder int) error {
+	existing, err := u.userPromptConfigRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrPromptConfigNotFound
+	}
+	existing.DisplayOrder = displayOrder
+	return u.userPromptConfigRepo.Update(ctx, existing)
+}
+
+// ──────────────────────────── SemanticModel ────────────────────────────
+
+func (u *DataUsecase) PageSemanticModel(ctx context.Context, page, size int, query *model.SemanticModel) ([]*model.SemanticModel, int64, error) {
+	return u.semanticModelRepo.Page(ctx, page, size, query)
+}
+
+func (u *DataUsecase) GetSemanticModelByID(ctx context.Context, id string) (*model.SemanticModel, error) {
+	entity, err := u.semanticModelRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if entity == nil {
+		return nil, ErrSemanticModelNotFound
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) CreateSemanticModel(ctx context.Context, entity *model.SemanticModel) (*model.SemanticModel, error) {
+	entity.ID = dataGenID()
+	if entity.Status == 0 {
+		entity.Status = 1
+	}
+	if err := u.semanticModelRepo.Create(ctx, entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) UpdateSemanticModel(ctx context.Context, entity *model.SemanticModel) error {
+	existing, err := u.semanticModelRepo.FindByID(ctx, entity.ID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrSemanticModelNotFound
+	}
+	return u.semanticModelRepo.Update(ctx, entity)
+}
+
+func (u *DataUsecase) DeleteSemanticModel(ctx context.Context, id string) error {
+	existing, err := u.semanticModelRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrSemanticModelNotFound
+	}
+	return u.semanticModelRepo.Delete(ctx, id)
+}
+
+func (u *DataUsecase) BatchDeleteSemanticModel(ctx context.Context, ids []string) error {
+	return u.semanticModelRepo.BatchDelete(ctx, ids)
+}
+
+func (u *DataUsecase) EnableSemanticModels(ctx context.Context, ids []string) error {
+	return u.semanticModelRepo.BatchUpdateStatus(ctx, ids, 1)
+}
+
+func (u *DataUsecase) DisableSemanticModels(ctx context.Context, ids []string) error {
+	return u.semanticModelRepo.BatchUpdateStatus(ctx, ids, 0)
+}
+
+// ──────────────────────────── BusinessKnowledge ────────────────────────────
+
+func (u *DataUsecase) PageBusinessKnowledge(ctx context.Context, page, size int, query *model.BusinessKnowledge) ([]*model.BusinessKnowledge, int64, error) {
+	return u.businessKnowledgeRepo.Page(ctx, page, size, query)
+}
+
+func (u *DataUsecase) GetBusinessKnowledgeByID(ctx context.Context, id string) (*model.BusinessKnowledge, error) {
+	entity, err := u.businessKnowledgeRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if entity == nil {
+		return nil, ErrBusinessKnowledgeNotFound
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) CreateBusinessKnowledge(ctx context.Context, entity *model.BusinessKnowledge) (*model.BusinessKnowledge, error) {
+	entity.ID = dataGenID()
+	if entity.EmbeddingStatus == "" {
+		entity.EmbeddingStatus = "pending"
+	}
+	if entity.IsRecall == 0 {
+		entity.IsRecall = 1
+	}
+	if err := u.businessKnowledgeRepo.Create(ctx, entity); err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+func (u *DataUsecase) UpdateBusinessKnowledge(ctx context.Context, entity *model.BusinessKnowledge) error {
+	existing, err := u.businessKnowledgeRepo.FindByID(ctx, entity.ID)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrBusinessKnowledgeNotFound
+	}
+	return u.businessKnowledgeRepo.Update(ctx, entity)
+}
+
+func (u *DataUsecase) DeleteBusinessKnowledge(ctx context.Context, id string) error {
+	existing, err := u.businessKnowledgeRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrBusinessKnowledgeNotFound
+	}
+	return u.businessKnowledgeRepo.Delete(ctx, id)
+}
+
+func (u *DataUsecase) RetryBusinessKnowledgeEmbedding(ctx context.Context, id string) error {
+	existing, err := u.businessKnowledgeRepo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrBusinessKnowledgeNotFound
+	}
+	existing.EmbeddingStatus = "pending"
+	existing.ErrorMsg = ""
+	return u.businessKnowledgeRepo.Update(ctx, existing)
 }

@@ -6,143 +6,167 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/infra/errcode"
 	"github.com/phoenix-agent-go/infra/response"
+	"github.com/phoenix-agent-go/internal/model"
 	"github.com/phoenix-agent-go/internal/service"
+	"github.com/phoenix-agent-go/internal/usecase"
 )
 
-// DatasourceHandler handles datasource CRUD, connection test, and logical relations.
-// All methods are stubs for Phase 5D; full implementations deferred to later phases.
 type DatasourceHandler struct {
 	svc *service.DataService
 }
 
-// NewDatasourceHandler creates a new DatasourceHandler.
 func NewDatasourceHandler(svc *service.DataService) *DatasourceHandler {
 	return &DatasourceHandler{svc: svc}
 }
 
-// GetTypes returns the list of supported datasource types (stub).
-// GET /datasource/types
 func (h *DatasourceHandler) GetTypes(c *gin.Context) {
 	types := []string{"MySQL", "PostgreSQL", "Oracle", "SQLServer", "ClickHouse", "MongoDB", "Redis"}
 	response.Success(c, types)
 }
 
-// List returns a paginated list of datasources (stub).
-// GET /datasource/
 func (h *DatasourceHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "10"))
-	response.SuccessPage(c, []interface{}{}, 0, page, size)
+	var query model.Datasource
+	_ = c.ShouldBindQuery(&query)
+
+	list, total, err := h.svc.PageDatasource(c.Request.Context(), page, size, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.SuccessPage(c, list, total, page, size)
 }
 
-// GetByID returns a stub datasource entity by ID.
-// GET /datasource/:id
 func (h *DatasourceHandler) GetByID(c *gin.Context) {
 	id := c.Param("id")
-	response.Success(c, map[string]interface{}{
-		"id":   id,
-		"name": "stub-datasource",
-		"type": "MySQL",
-	})
+	entity, err := h.svc.GetDatasourceByID(c.Request.Context(), id)
+	if err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, entity)
 }
 
-// GetTables returns a stub table list for the given datasource.
-// GET /datasource/:id/tables
 func (h *DatasourceHandler) GetTables(c *gin.Context) {
-	response.Success(c, []map[string]interface{}{
-		{"tableName": "stub_table_1", "comment": "Stub table 1 - Phase 5"},
-		{"tableName": "stub_table_2", "comment": "Stub table 2 - Phase 5"},
-	})
+	id := c.Param("id")
+	tables, err := h.svc.GetDatasourceTables(c.Request.Context(), id)
+	if err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, tables)
 }
 
-// GetColumns returns a stub column list for the given table of a datasource.
-// GET /datasource/:id/tables/:tableName/columns
 func (h *DatasourceHandler) GetColumns(c *gin.Context) {
+	id := c.Param("id")
 	tableName := c.Param("tableName")
-	response.Success(c, []map[string]interface{}{
-		{"columnName": "id", "dataType": "bigint", "tableName": tableName},
-		{"columnName": "name", "dataType": "varchar", "tableName": tableName},
-	})
+	columns, err := h.svc.GetDatasourceColumns(c.Request.Context(), id, tableName)
+	if err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, columns)
 }
 
-// Create creates a new datasource (stub).
-// POST /datasource
 func (h *DatasourceHandler) Create(c *gin.Context) {
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	var entity model.Datasource
+	if err := c.ShouldBindJSON(&entity); err != nil {
 		response.Error(c, errcode.InvalidParams)
 		return
 	}
-	response.Success(c, map[string]interface{}{
-		"id":      "stub-generated-id",
-		"message": "Datasource create stub - Phase 5",
-		"body":    body,
-	})
+	result, err := h.svc.CreateDatasource(c.Request.Context(), &entity)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, result)
 }
 
-// Update updates an existing datasource (stub).
-// PUT /datasource/:id
 func (h *DatasourceHandler) Update(c *gin.Context) {
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	var entity model.Datasource
+	if err := c.ShouldBindJSON(&entity); err != nil {
 		response.Error(c, errcode.InvalidParams)
 		return
 	}
-	body["id"] = c.Param("id")
-	response.Success(c, body)
+	entity.ID = c.Param("id")
+	if err := h.svc.UpdateDatasource(c.Request.Context(), &entity); err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, true)
 }
 
-// Delete soft-deletes a datasource by ID (stub).
-// DELETE /datasource/:id
 func (h *DatasourceHandler) Delete(c *gin.Context) {
-	response.Success(c, map[string]interface{}{
-		"id":      c.Param("id"),
-		"message": "Datasource delete stub - Phase 5",
-	})
+	if err := h.svc.DeleteDatasource(c.Request.Context(), c.Param("id")); err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, true)
 }
 
-// TestConnection tests the connection for a given datasource (stub).
-// POST /datasource/:id/test
 func (h *DatasourceHandler) TestConnection(c *gin.Context) {
-	response.Success(c, map[string]interface{}{
-		"success": true,
-		"message": "Connection test stub - Phase 5",
-	})
+	err := h.svc.TestDatasourceConnection(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.Success(c, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	response.Success(c, gin.H{"success": true, "message": "连接成功"})
 }
 
-// ListLogicalRelations returns an empty list of logical relations (stub).
-// GET /datasource/:id/logical-relations
 func (h *DatasourceHandler) ListLogicalRelations(c *gin.Context) {
-	response.Success(c, []interface{}{})
+	dsID, _ := strconv.Atoi(c.Param("id"))
+	list, err := h.svc.ListLogicalRelations(c.Request.Context(), dsID)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
 }
 
-// CreateLogicalRelation creates a new logical relation (stub).
-// POST /datasource/:id/logical-relations
 func (h *DatasourceHandler) CreateLogicalRelation(c *gin.Context) {
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	var entity model.LogicalRelation
+	if err := c.ShouldBindJSON(&entity); err != nil {
 		response.Error(c, errcode.InvalidParams)
 		return
 	}
-	body["datasourceId"] = c.Param("id")
-	response.Success(c, body)
+	dsID, _ := strconv.Atoi(c.Param("id"))
+	entity.DatasourceId = dsID
+	result, err := h.svc.CreateLogicalRelation(c.Request.Context(), &entity)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, result)
 }
 
-// UpdateLogicalRelation updates logical relations in bulk (stub).
-// PUT /datasource/:id/logical-relations
 func (h *DatasourceHandler) UpdateLogicalRelation(c *gin.Context) {
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	dsID, _ := strconv.Atoi(c.Param("id"))
+	var relations []*model.LogicalRelation
+	if err := c.ShouldBindJSON(&relations); err != nil {
 		response.Error(c, errcode.InvalidParams)
 		return
 	}
-	response.Success(c, body)
+	if err := h.svc.UpdateLogicalRelations(c.Request.Context(), dsID, relations); err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, true)
 }
 
-// DeleteLogicalRelation deletes a logical relation (stub).
-// DELETE /datasource/:id/logical-relations
 func (h *DatasourceHandler) DeleteLogicalRelation(c *gin.Context) {
-	response.Success(c, map[string]interface{}{
-		"message": "Logical relation delete stub - Phase 5",
-	})
+	dsID, _ := strconv.Atoi(c.Param("id"))
+	if err := h.svc.DeleteLogicalRelations(c.Request.Context(), dsID); err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, true)
+}
+
+func handleErr(c *gin.Context, err error) {
+	if appErr, ok := err.(*usecase.AppError); ok {
+		response.ErrorWithMsg(c, errcode.ErrCode{Code: appErr.Code}, appErr.Msg)
+		return
+	}
+	response.Error(c, errcode.InternalError)
 }

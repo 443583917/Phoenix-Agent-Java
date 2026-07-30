@@ -6,84 +6,102 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/infra/errcode"
 	"github.com/phoenix-agent-go/infra/response"
+	"github.com/phoenix-agent-go/internal/model"
 	"github.com/phoenix-agent-go/internal/service"
+	"github.com/phoenix-agent-go/internal/usecase"
 )
 
-// BusinessKnowledgeHandler handles business knowledge CRUD operations.
 type BusinessKnowledgeHandler struct {
 	svc *service.DataService
 }
 
-// NewBusinessKnowledgeHandler creates a new BusinessKnowledgeHandler.
 func NewBusinessKnowledgeHandler(svc *service.DataService) *BusinessKnowledgeHandler {
 	return &BusinessKnowledgeHandler{svc: svc}
 }
 
-// List returns a paginated list of business knowledge entries.
-// GET /business-knowledge/
 func (h *BusinessKnowledgeHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "10"))
-	response.SuccessPage(c, []interface{}{}, 0, page, size)
+	var query model.BusinessKnowledge
+	_ = c.ShouldBindQuery(&query)
+	list, total, err := h.svc.PageBusinessKnowledge(c.Request.Context(), page, size, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.SuccessPage(c, list, total, page, size)
 }
 
-// GetByID returns a single business knowledge entry by its ID.
-// GET /business-knowledge/:id
 func (h *BusinessKnowledgeHandler) GetByID(c *gin.Context) {
-	id := c.Param("id")
-	response.Success(c, gin.H{"id": id, "name": "stub-business-knowledge"})
+	entity, err := h.svc.GetBusinessKnowledgeByID(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, entity)
 }
 
-// Create creates a new business knowledge entry.
-// POST /business-knowledge
 func (h *BusinessKnowledgeHandler) Create(c *gin.Context) {
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	var entity model.BusinessKnowledge
+	if err := c.ShouldBindJSON(&entity); err != nil {
 		response.Error(c, errcode.InvalidParams)
 		return
 	}
-	response.Success(c, gin.H{"created": true, "data": body})
+	result, err := h.svc.CreateBusinessKnowledge(c.Request.Context(), &entity)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, result)
 }
 
-// Update updates an existing business knowledge entry.
-// PUT /business-knowledge/:id
 func (h *BusinessKnowledgeHandler) Update(c *gin.Context) {
-	id := c.Param("id")
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	var entity model.BusinessKnowledge
+	if err := c.ShouldBindJSON(&entity); err != nil {
 		response.Error(c, errcode.InvalidParams)
 		return
 	}
-	response.Success(c, gin.H{"id": id, "updated": true, "data": body})
+	entity.ID = c.Param("id")
+	if err := h.svc.UpdateBusinessKnowledge(c.Request.Context(), &entity); err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, true)
 }
 
-// Delete deletes a business knowledge entry by its ID.
-// DELETE /business-knowledge/:id
 func (h *BusinessKnowledgeHandler) Delete(c *gin.Context) {
-	id := c.Param("id")
-	response.Success(c, gin.H{"id": id, "deleted": true})
+	if err := h.svc.DeleteBusinessKnowledge(c.Request.Context(), c.Param("id")); err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, true)
 }
 
-// Recall recalls knowledge for a given business knowledge entry.
-// POST /business-knowledge/recall/:id
 func (h *BusinessKnowledgeHandler) Recall(c *gin.Context) {
-	id := c.Param("id")
-	response.Success(c, gin.H{
-		"id":      id,
-		"results": []interface{}{},
-		"recalled": true,
-	})
+	entity, err := h.svc.GetBusinessKnowledgeByID(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": entity.ID, "results": []interface{}{}, "recalled": true})
 }
 
-// RefreshVectorStore refreshes the vector store index.
-// POST /business-knowledge/refresh-vector-store
 func (h *BusinessKnowledgeHandler) RefreshVectorStore(c *gin.Context) {
 	response.Success(c, gin.H{"refreshed": true, "message": "Vector store refresh triggered"})
 }
 
-// RetryEmbedding retries embedding for a given business knowledge entry.
-// POST /business-knowledge/retry-embedding/:id
 func (h *BusinessKnowledgeHandler) RetryEmbedding(c *gin.Context) {
-	id := c.Param("id")
-	response.Success(c, gin.H{"id": id, "reembedded": true})
+	if err := h.svc.RetryBusinessKnowledgeEmbedding(c.Request.Context(), c.Param("id")); err != nil {
+		handleErr(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": c.Param("id"), "reembedded": true})
+}
+
+func handleErr(c *gin.Context, err error) {
+	if appErr, ok := err.(*usecase.AppError); ok {
+		response.ErrorWithMsg(c, errcode.ErrCode{Code: appErr.Code}, appErr.Msg)
+		return
+	}
+	response.Error(c, errcode.InternalError)
 }

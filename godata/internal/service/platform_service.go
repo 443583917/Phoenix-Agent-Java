@@ -276,3 +276,11 @@ func (s *PlatformService) PagePlatformInfo(ctx context.Context, page, size int, 
 func (s *PlatformService) TogglePlatformInfoStatus(ctx context.Context, id string) error {
 	return s.uc.TogglePlatformInfoStatus(ctx, id)
 }
+
+func (s *PlatformService) SyncDepartments(ctx context.Context) error {
+	return s.uc.SyncDepartments(ctx)
+}
+
+func (s *PlatformService) SyncUsers(ctx context.Context) error {
+	return s.uc.SyncUsers(ctx)
+}

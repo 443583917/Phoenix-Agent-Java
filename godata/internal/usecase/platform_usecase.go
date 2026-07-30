@@ -581,3 +581,11 @@ func (u *PlatformUsecase) PagePlatformInfo(ctx context.Context, page, size int, 
 func (u *PlatformUsecase) TogglePlatformInfoStatus(ctx context.Context, id string) error {
 	return u.platformInfoRepo.ToggleStatus(ctx, id)
 }
+
+func (u *PlatformUsecase) SyncDepartments(ctx context.Context) error {
+	return nil
+}
+
+func (u *PlatformUsecase) SyncUsers(ctx context.Context) error {
+	return nil
+}

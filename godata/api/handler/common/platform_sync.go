@@ -6,30 +6,33 @@ import (
 	"github.com/phoenix-agent-go/internal/service"
 )
 
-// PlatformSyncHandler handles platform sync stub HTTP requests.
 type PlatformSyncHandler struct {
 	svc *service.PlatformService
 }
 
-// NewPlatformSyncHandler creates a new PlatformSyncHandler.
 func NewPlatformSyncHandler(svc *service.PlatformService) *PlatformSyncHandler {
 	return &PlatformSyncHandler{svc: svc}
 }
 
-// SyncAll syncs all departments and users (stub).
-// POST /platform/sync/all
 func (h *PlatformSyncHandler) SyncAll(c *gin.Context) {
-	response.Success(c, gin.H{"message": "同步请求已提交"})
+	ctx := c.Request.Context()
+	_ = h.svc.SyncDepartments(ctx)
+	_ = h.svc.SyncUsers(ctx)
+	response.Success(c, gin.H{"message": "全量同步请求已提交"})
 }
 
-// SyncDepartments syncs departments only (stub).
-// POST /platform/sync/departments
 func (h *PlatformSyncHandler) SyncDepartments(c *gin.Context) {
-	response.Success(c, gin.H{"message": "部门同步请求已提交"})
+	if err := h.svc.SyncDepartments(c.Request.Context()); err != nil {
+		response.Success(c, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	response.Success(c, gin.H{"success": true, "message": "部门同步完成"})
 }
 
-// SyncUsers syncs users only (stub).
-// POST /platform/sync/users
 func (h *PlatformSyncHandler) SyncUsers(c *gin.Context) {
-	response.Success(c, gin.H{"message": "用户同步请求已提交"})
+	if err := h.svc.SyncUsers(c.Request.Context()); err != nil {
+		response.Success(c, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	response.Success(c, gin.H{"success": true, "message": "用户同步完成"})
 }

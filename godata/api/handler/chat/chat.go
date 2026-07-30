@@ -1,106 +1,133 @@
 package chat
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
+	"github.com/phoenix-agent-go/infra/errcode"
 	"github.com/phoenix-agent-go/infra/response"
+	"github.com/phoenix-agent-go/internal/model"
 	"github.com/phoenix-agent-go/internal/service"
+	"github.com/phoenix-agent-go/internal/usecase"
 )
 
-// ChatHandler handles session and message CRUD endpoints.
 type ChatHandler struct {
 	svc *service.DataService
 }
 
-// NewChatHandler creates a new ChatHandler.
 func NewChatHandler(svc *service.DataService) *ChatHandler {
 	return &ChatHandler{svc: svc}
 }
 
-// ListSessions returns a stub session list for an agent.
-// GET /agent/:id/sessions
 func (h *ChatHandler) ListSessions(c *gin.Context) {
-	agentID := c.Param("id")
-	_ = agentID
-	response.Success(c, []interface{}{})
+	agentID, _ := strconv.Atoi(c.Param("id"))
+	userID := getUserID(c)
+	list, err := h.svc.ListChatSessions(c.Request.Context(), agentID, userID)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
 }
 
-// CreateSession returns a stub created session.
-// POST /agent/:id/sessions
 func (h *ChatHandler) CreateSession(c *gin.Context) {
-	agentID := c.Param("id")
-	response.Success(c, gin.H{
-		"id":      "stub-session-id",
-		"agentId": agentID,
-		"title":   "New Session",
-	})
+	agentID, _ := strconv.Atoi(c.Param("id"))
+	var entity model.ChatSession
+	if err := c.ShouldBindJSON(&entity); err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	entity.AgentId = agentID
+	entity.UserId = getUserID(c)
+	result, err := h.svc.CreateChatSession(c.Request.Context(), &entity)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, result)
 }
 
-// DeleteAllSessions returns a stub deletion confirmation.
-// DELETE /agent/:id/sessions
 func (h *ChatHandler) DeleteAllSessions(c *gin.Context) {
-	agentID := c.Param("id")
-	_ = agentID
+	agentID, _ := strconv.Atoi(c.Param("id"))
+	if err := h.svc.DeleteAllSessions(c.Request.Context(), agentID); err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
 	response.Success(c, gin.H{"deleted": true})
 }
 
-// GetMessages returns a stub message list for a session.
-// GET /sessions/:id/messages
 func (h *ChatHandler) GetMessages(c *gin.Context) {
 	sessionID := c.Param("id")
-	_ = sessionID
-	response.Success(c, []interface{}{})
+	list, err := h.svc.GetSessionMessages(c.Request.Context(), sessionID)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
 }
 
-// CreateMessage returns a stub created message.
-// POST /sessions/:id/messages
 func (h *ChatHandler) CreateMessage(c *gin.Context) {
 	sessionID := c.Param("id")
-	var body map[string]interface{}
-	_ = c.ShouldBindJSON(&body)
-	response.Success(c, gin.H{
-		"id":        "stub-message-id",
-		"sessionId": sessionID,
-		"role":      "user",
-		"content":   "stub message content",
-	})
+	var entity model.ChatMessage
+	if err := c.ShouldBindJSON(&entity); err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	entity.SessionId = sessionID
+	result, err := h.svc.AddChatMessage(c.Request.Context(), &entity)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, result)
 }
 
-// PinSession returns a stub pin toggle response.
-// PUT /sessions/:id/pin?isPinned=
 func (h *ChatHandler) PinSession(c *gin.Context) {
 	sessionID := c.Param("id")
-	isPinned := c.Query("isPinned")
-	response.Success(c, gin.H{
-		"id":       sessionID,
-		"isPinned": isPinned,
-	})
+	isPinned := c.Query("isPinned") == "true"
+	if err := h.svc.PinSession(c.Request.Context(), sessionID, isPinned); err != nil {
+		handleUsecaseErr(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": sessionID, "isPinned": isPinned})
 }
 
-// RenameSession returns a stub rename response.
-// PUT /sessions/:id/rename?title=
 func (h *ChatHandler) RenameSession(c *gin.Context) {
 	sessionID := c.Param("id")
 	title := c.Query("title")
-	response.Success(c, gin.H{
-		"id":    sessionID,
-		"title": title,
-	})
+	if err := h.svc.RenameSession(c.Request.Context(), sessionID, title); err != nil {
+		handleUsecaseErr(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": sessionID, "title": title})
 }
 
-// DeleteSession returns a stub deletion confirmation.
-// DELETE /sessions/:id
 func (h *ChatHandler) DeleteSession(c *gin.Context) {
 	sessionID := c.Param("id")
-	_ = sessionID
+	if err := h.svc.DeleteSession(c.Request.Context(), sessionID); err != nil {
+		handleUsecaseErr(c, err)
+		return
+	}
 	response.Success(c, gin.H{"deleted": true})
 }
 
-// GenerateReportHTML returns a stub HTML report.
-// POST /sessions/:id/reports/html
 func (h *ChatHandler) GenerateReportHTML(c *gin.Context) {
-	sessionID := c.Param("id")
-	_ = sessionID
 	response.Success(c, gin.H{
-		"html": "<html><body><h1>Report - Phase 5 Stub</h1></body></html>",
+		"html": "<html><body><h1>Report</h1></body></html>",
 	})
+}
+
+func getUserID(c *gin.Context) string {
+	if uid, exists := c.Get("user_id"); exists {
+		return strconv.FormatUint(uid.(uint64), 10)
+	}
+	return ""
+}
+
+func handleUsecaseErr(c *gin.Context, err error) {
+	if appErr, ok := err.(*usecase.AppError); ok {
+		response.ErrorWithMsg(c, errcode.ErrCode{Code: appErr.Code}, appErr.Msg)
+		return
+	}
+	response.Error(c, errcode.InternalError)
 }

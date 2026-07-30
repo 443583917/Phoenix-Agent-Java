@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package rpc;
+
+option go_package = "github.com/phoenix-agent-go/rpc/proto";
+
+service PrivilegeService {
+  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  string login_type = 3;
+  string ip = 4;
+}
+
+message LoginResponse {
+  string user_id = 1;
+  string username = 2;
+  string token = 3;
+  repeated string roles = 4;
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message GetUserResponse {
+  string user_id = 1;
+  string username = 2;
+  string real_name = 3;
+  string status = 4;
+}

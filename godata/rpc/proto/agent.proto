@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package rpc;
+
+option go_package = "github.com/phoenix-agent-go/rpc/proto";
+
+service AgentService {
+  rpc StreamCall(AgentCallRequest) returns (stream AgentCallResponse);
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+}
+
+message AgentCallRequest {
+  string agent_sn = 1;
+  string user_id = 2;
+  string message = 3;
+  string session_id = 4;
+}
+
+message AgentCallResponse {
+  string content = 1;
+  string event_type = 2;
+  bool done = 3;
+}
+
+message ListAgentsRequest {}
+
+message AgentInfo {
+  string id = 1;
+  string sn = 2;
+  string name = 3;
+  string type = 4;
+  string status = 5;
+  string description = 6;
+}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
