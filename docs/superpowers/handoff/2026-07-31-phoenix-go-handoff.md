@@ -8,6 +8,278 @@
 
 ---
 
+## 目录架构与代码归属规则
+
+```
+godata/
+├── cmd/                            # ====== 服务入口（每个独立进程） ======
+│   ├── api/main.go                 # HTTP API 服务，主入口（端口 8066）
+│   ├── rpc/main.go                 # gRPC 服务（骨架，Task 5 补全）
+│   ├── agent/main.go               # Agent 独立服务（骨架）
+│   └── job/main.go                 # 定时任务服务（骨架）
+│
+├── api/                            # ====== HTTP 层 ======
+│   ├── router.go                   # 总路由注册 — 新增 handler 必须在此注册
+│   └── handler/                    # 控制器（按业务域拆分，每域一个子目录）
+│       ├── privilege/              # → 权限认证（12 个 handler 文件）
+│       ├── platform/               # → 平台管理（7 个 handler 文件）
+│       ├── agent/                  # → 智能体 API（SSE 流式对话）
+│       ├── chat/                   # → 对话/SSE/Graph 流式搜索
+│       ├── datasource/             # → 数据源管理 + Agent 数据源关联
+│       ├── knowledge/              # → Agent 知识库 + 业务知识
+│       ├── modelconfig/            # → AI 模型配置
+│       ├── prompt/                 # → Prompt 模板配置
+│       ├── semanticmodel/          # → 语义模型
+│       ├── rag/                    # → RAG 文件管理
+│       ├── kg/                     # → 知识图谱
+│       └── common/                 # → 公共（上传/平台信息/同步）
+│   └── middleware/                 # Gin 中间件（auth/rbac/cors/logger/tracing/recovery/ratelimit）
+│
+├── rpc/                            # ====== gRPC 层（骨架，Task 5 补全） ======
+│   ├── proto/                      # .proto 定义文件
+│   ├── server/                     # gRPC server 实现
+│   └── client/                     # gRPC 客户端
+│
+├── agent/                          # ====== AI Agent 引擎 ======
+│   ├── runtime/                    # Agent 生命周期管理
+│   │   ├── manager.go              # AgentManager — 创建、路由、流式调用
+│   │   └── registry.go             # Agent 注册表（SN 索引）
+│   ├── agents/                     # Agent 类型
+│   │   ├── react_agent.go          # ReactAgent 构建器
+│   │   └── assistant_agent.go      # 无工具通用助手
+│   ├── tools/                      # 工具注册 + 实现
+│   │   ├── registry.go             # ToolRegistry — 全局工具注册表
+│   │   ├── function/calculator.go  # 计算器 FunctionTool 示例
+│   │   ├── datasource/sql_tool.go  # ⭐ 数据源 SQL 查询工具（NL2SQL 关键）
+│   │   ├── external/               # 🟡 MCP 外部工具（待 Task 7）  ← 新工具往这加
+│   │   ├── privilege/              # 🟢 权限检查工具（待 Task 12） ← 新工具往这加
+│   │   ├── rpc/                    # 🟢 RPC 调用工具（待 Task 12）  ← 新工具往这加
+│   │   └── web/                    # 🟢 Web 搜索工具（待 Task 12）  ← 新工具往这加
+│   ├── workflows/                  # 工作流图（StateGraph）
+│   │   ├── nl2sql/                 # ⭐ NL2SQL 工作流（16 节点，完整 LLM 实现）
+│   │   │   ├── graph.go            # StateGraph 构建器
+│   │   │   ├── nodes/              # 16 个节点文件
+│   │   │   ├── prompts/            # 9 个 LLM Prompt 模板
+│   │   │   └── types/              # 类型定义 + 状态常量
+│   │   ├── rag/                    # RAG 工作流（stub + retrieve 节点）
+│   │   │   ├── graph.go
+│   │   │   └── nodes/
+│   │   └── kg/                     # 🟡 KG 工作流（待 Task 4）   ← KG 节点写这里
+│   │       ├── graph.go
+│   │       └── nodes/              # entity_extract / relation_extract / graph_merge
+│   ├── memory/                     # 记忆系统
+│   │   ├── short_term.go           # 短期记忆（tRPC session/inmemory）
+│   │   ├── long_term.go            # 长期记忆（tRPC memory/inmemory）
+│   │   ├── profile.go              # 用户画像（GORM）
+│   │   └── pipeline.go             # 异步记忆提取管道（LLM → profile/facts/vector）
+│   ├── knowledge/                  # 知识检索
+│   │   ├── embedding.go            # OpenAI 嵌入（tRPC embedder/openai）
+│   │   ├── retriever.go            # 混合检索（tRPC knowledge）
+│   │   └── splitter.go             # 文本分割
+│   ├── hooks/                      # Agent Hook（BEFORE_MODEL）
+│   │   ├── profile_hook.go         # 画像注入 Hook
+│   │   ├── limit_hook.go           # 模型调用限制 Hook
+│   │   └── summarization_hook.go   # 对话摘要 Hook
+│   ├── interceptors/               # Agent 拦截器
+│   │   └── login_interceptor.go    # 登录追踪 + 历史记忆注入
+│   └── runner/                     # 对话执行器
+│       ├── runner.go               # ConversationRunner
+│       ├── sse.go                  # SSE 写入
+│       ├── hitl.go                 # HITL 处理器（内存 channel）
+│       └── hitl_cache.go           # Redis HITL 确认缓存
+│
+├── internal/                       # ====== 业务核心（DDD 分层） ======
+│   ├── domain/                     # 领域逻辑（纯业务规则，零框架依赖）
+│   │   ├── privilege/              # ✅ 已实现: domain.go（密码验证、用户校验）
+│   │   └── {agent,chat,common,datasource,knowledge,  ← 🟡 这些领域逻辑暂在 usecase
+│   │       modelconfig,platform,prompt,rag,semanticmodel}  # 待 Task 8 提取到这里
+│   ├── usecase/                    # 用例编排（事务边界，跨 domain 协调）
+│   │   ├── privilege_usecase.go    # 权限用例（登录/CURD/ACL/密码）
+│   │   ├── platform_usecase.go     # 平台用例（账户/组织/租户）
+│   │   ├── data_usecase.go         # ⭐ 数据用例（Agent/数据源/知识/配置 CRUD）
+│   │   ├── rag_usecase.go          # RAG 用例
+│   │   ├── kg_usecase.go           # KG 用例
+│   │   └── agent_usecase.go        # Agent 用例
+│   ├── service/                    # 应用服务（对接 handler，格式转换，透传 usecase）
+│   │   ├── privilege_service.go
+│   │   ├── platform_service.go
+│   │   ├── data_service.go         # ← 新增 handler 方法先在这里加签名
+│   │   ├── rag_service.go
+│   │   ├── kg_service.go
+│   │   └── agent_service.go
+│   ├── repository/                 # 仓储接口（依赖反转，domain 依赖接口而非实现）
+│   │   ├── privilege_repo.go       # 11 个接口
+│   │   ├── platform_repo.go        # 7 个接口
+│   │   ├── data_repo.go            # 6 个接口（Agent/Knowledge/Datasource/Semantic/Model/Prompt）
+│   │   ├── rag_repo.go
+│   │   ├── kg_repo.go
+│   │   └── agent_memory_repo.go
+│   ├── dao/                        # 数据访问实现（Repository 的具体实现）
+│   │   ├── db/                     # GORM 实现
+│   │   │   ├── privilege_repo.go   # 对应 privilege 接口
+│   │   │   ├── platform_repo.go    # 对应 platform 接口
+│   │   │   ├── data_repo.go        # ⭐ 对应 data 接口 ← Stub 补全主要改这里
+│   │   │   ├── rag_repo.go
+│   │   │   ├── kg_repo.go
+│   │   │   └── agent_memory_repo.go
+│   │   ├── cache/                  # Redis + BigCache
+│   │   │   └── privilege_cache.go
+│   │   ├── queue/                  # RabbitMQ
+│   │   │   ├── producer.go         # ✅ 生产者（已实现）
+│   │   │   └── consumer.go         # ✅ 消费者（已实现）
+│   │   └── external/               # 外部服务 SDK
+│   │       ├── milvus.go           # Milvus 向量操作
+│   │       ├── docker_exec.go      # Docker Python 执行器
+│   │       ├── oss.go              # 对象存储
+│   │       ├── dingtalk.go         # 🟡 钉钉 SDK（待 Task 11）  ← SDK 写这里
+│   │       ├── feishu.go           # 🟡 飞书 SDK（待 Task 11）  ← SDK 写这里
+│   │       ├── wecom.go            # 🟡 企微 SDK（待 Task 11）  ← SDK 写这里
+│   │       └── flink.go            # Flink 集成
+│   ├── event/                      # 🟡 领域事件（待 Task 9）
+│   │   ├── types.go
+│   │   └── handler/                # 按模块拆分事件处理器
+│   ├── job/                        # 🟡 定时任务（待 Task 10）
+│   │   ├── scheduler.go
+│   │   └── jobs/
+│   ├── model/                      # 数据模型（Entity / DTO / VO）
+│   │   ├── base.go                 # BaseModel（privilege 风格: ID/CreateTime/UpdateTime/...）
+│   │   ├── base_models.go          # PlatformBaseModel（platform 风格: creator/updator/...）
+│   │   ├── privilege_entity.go     # 12 个 privilege 实体
+│   │   ├── privilege_dto.go        # DTO（请求体）
+│   │   ├── privilege_vo.go         # VO（响应体）
+│   │   ├── platform_entity.go      # 6 个 platform 实体
+│   │   ├── platform_dto.go
+│   │   ├── data_entity.go          # 14 个 data 实体
+│   │   ├── data_dto.go             # 待补全（Agent/Knowledge 等 DTO）
+│   │   ├── agent_entity.go         # 4 个 agent 实体
+│   │   ├── agent_dto.go            # ChatModelRequest / SSE 事件
+│   │   ├── common_entity.go        # PlatformInfo
+│   │   ├── rag_entity.go
+│   │   └── kg_entity.go
+│   └── config/                     # Viper 配置结构体映射
+│       ├── app.go, db.go, redis.go, milvus.go, rabbitmq.go
+│       ├── agent.go, rpc.go, monitor.go
+│       └── casbin_model.conf       # Casbin RBAC 模型
+│
+├── infra/                          # ====== 基础设施（可跨项目复用） ======
+│   ├── logger/                     # Zap 封装（✅ 有测试）
+│   ├── config/                     # Viper 加载器（✅ 有测试）
+│   ├── response/                   # 统一响应 Response / PageResponse
+│   ├── errcode/                    # 统一错误码 ErrCode
+│   ├── jwt/                        # JWT 生成/解析
+│   ├── pagination/                 # 分页参数解析
+│   ├── sse/                        # SSE 流式输出工具
+│   ├── validate/                   # 参数校验封装
+│   ├── cache/                      # Redis + BigCache 初始化
+│   ├── queue/                      # RabbitMQ 连接管理
+│   ├── lock/                       # Redis 分布式锁（Lua 原子解锁）
+│   ├── monitoring/                 # OpenTelemetry 初始化
+│   ├── id/                         # Sonyflake ID 生成器
+│   └── utils/                      # 🟢 通用工具函数（仅 .gitkeep）← 通用函数加这里
+│
+├── configs/                        # ====== YAML 配置文件 ======
+│   ├── api/app.yaml                # HTTP 端口/CORS/JWT 密钥
+│   ├── agent/app.yaml              # AI 模型配置（provider/model/api_key）
+│   ├── rpc/app.yaml                # gRPC 端口
+│   ├── job/app.yaml                # 定时任务 cronspec
+│   ├── db.yaml                     # PostgreSQL 连接
+│   ├── redis.yaml                  # Redis 连接
+│   ├── milvus.yaml                 # Milvus 向量库
+│   ├── rabbitmq.yaml               # RabbitMQ 消息队列
+│   └── monitor.yaml                # OpenTelemetry + 日志级别
+│
+├── migrations/                     # 🟡 数据库迁移（待 Task 6）
+├── scripts/                        # 构建脚本
+├── storage/                        # 文件存储（上传头像等）
+├── Dockerfile                      # ✅ 多阶段构建
+├── docker-compose.yaml             # ✅ 8 个服务编排
+├── Makefile                        # ✅ 14 个构建目标
+├── go.mod
+└── go.sum
+```
+
+### 重构代码归属速查表
+
+| 你要做的事 | 代码写在哪里 | 示例 |
+|:---|:---|:---|
+| 新增 HTTP 接口 | `api/handler/<模块>/` + `api/router.go` | `api/handler/privilege/user.go` |
+| 新增业务逻辑 | `internal/usecase/<模块>_usecase.go` | `internal/usecase/privilege_usecase.go` |
+| 新增数据库操作（接口） | `internal/repository/<模块>_repo.go` | `internal/repository/privilege_repo.go` |
+| 新增数据库操作（实现） | `internal/dao/db/<模块>_repo.go` | `internal/dao/db/privilege_repo.go` |
+| 新增缓存操作 | `internal/dao/cache/<模块>_cache.go` | `internal/dao/cache/privilege_cache.go` |
+| 新增消息队列操作 | `internal/dao/queue/` | `internal/dao/queue/consumer.go` |
+| 新增外部 SDK | `internal/dao/external/<服务>.go` | `internal/dao/external/dingtalk.go` |
+| 新增实体/DTO/VO | `internal/model/<模块>_entity.go` 或 `_dto.go` 或 `_vo.go` | `internal/model/privilege_entity.go` |
+| 纯业务规则（无框架依赖） | `internal/domain/<模块>/` | `internal/domain/privilege/domain.go` |
+| 新增 Agent 工具 | `agent/tools/<类型>/` | `agent/tools/datasource/sql_tool.go` |
+| 新增工作流节点 | `agent/workflows/<工作流>/nodes/` | `agent/workflows/nl2sql/nodes/intent.go` |
+| 新增 Agent Hook | `agent/hooks/` | `agent/hooks/profile_hook.go` |
+| 新增 Agent 拦截器 | `agent/interceptors/` | `agent/interceptors/login_interceptor.go` |
+| 新增通用工具函数 | `infra/utils/` | `infra/utils/strings.go` |
+| 新增事件处理器 | `internal/event/handler/<模块>/` | `internal/event/handler/privilege/user_created.go` |
+| 新增定时任务 | `internal/job/jobs/` | `internal/job/jobs/daily_report.go` |
+| 新增 gRPC proto | `rpc/proto/` | `rpc/proto/agent.proto` |
+| 新增 gRPC 实现 | `rpc/server/` | `rpc/server/agent_server.go` |
+| 新增服务入口 | `cmd/<服务>/main.go` | `cmd/rpc/main.go` |
+| 新增配置结构体 | `internal/config/<模块>.go` | `internal/config/db.go` |
+| 新增中间件 | `api/middleware/` | `api/middleware/auth.go` |
+| 新增基础设施组件 | `infra/<组件>/` | `infra/cache/cache.go` |
+
+### GORM 实体约定
+
+```go
+// 每个实体文件头部有 Java 对照注释
+// Java: phoenix-privilege-api/.../PrivilegeUser.java  →  Go: internal/model/privilege_entity.go
+
+// Privilege 风格（phoenix-privilege）：
+type PrivilegeUser struct {
+    BaseModel                    // ID string PK + CreateTime/UpdateTime/CreateBy/UpdateBy/DelFlag int
+    Username string `gorm:"column:username"`
+}
+func (PrivilegeUser) TableName() string { return "tbl_privilege_user" }
+
+// Platform 风格（phoenix-platform / phoenix-common）：
+type GroupInfo struct {
+    PlatformBaseModel            // CreateTime/creator/UpdateTime/updator/DelFlag/keyword
+    ID string `gorm:"column:id;primaryKey"`  // 各实体自声明 PK
+    Name string `gorm:"column:name"`
+}
+func (GroupInfo) TableName() string { return "tbl_platform_group_info" }
+```
+
+### Handler 统一模式
+
+```go
+// 每个 Handler 文件遵循此模板：
+type XxxHandler struct {
+    svc *service.XxxService        // 注入 service
+}
+
+func NewXxxHandler(svc *service.XxxService) *XxxHandler {
+    return &XxxHandler{svc: svc}
+}
+
+func (h *XxxHandler) GetByID(c *gin.Context) {
+    // 1. 解析参数
+    id := c.Param("id")
+    // 2. 调用 service
+    result, err := h.svc.GetByID(c.Request.Context(), id)
+    // 3. 处理错误
+    if err != nil {
+        if appErr, ok := err.(*usecase.AppError); ok {
+            response.Error(c, errcode.ErrCode{Code: appErr.Code, Msg: appErr.Msg})
+            return
+        }
+        response.Error(c, errcode.InternalError)
+        return
+    }
+    // 4. 返回结果
+    response.Success(c, result)
+}
+```
+
+---
+
 ## 完整的可执行任务列表
 
 按优先级排序，每个任务独立可执行。使用 `/superpowers:subagent-driven-development` 逐个执行。
