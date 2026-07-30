@@ -8,10 +8,14 @@ import (
 	"github.com/phoenix-agent-go/agent/runner"
 	"github.com/phoenix-agent-go/agent/runtime"
 	"github.com/phoenix-agent-go/api/handler/agent"
+	"github.com/phoenix-agent-go/api/handler/chat"
 	"github.com/phoenix-agent-go/api/handler/common"
 	datasourceHandler "github.com/phoenix-agent-go/api/handler/datasource"
 	knowledgeHandler "github.com/phoenix-agent-go/api/handler/knowledge"
+	"github.com/phoenix-agent-go/api/handler/modelconfig"
 	"github.com/phoenix-agent-go/api/handler/platform"
+	"github.com/phoenix-agent-go/api/handler/prompt"
+	semanticmodelHandler "github.com/phoenix-agent-go/api/handler/semanticmodel"
 	"github.com/phoenix-agent-go/api/handler/privilege"
 	"github.com/phoenix-agent-go/api/middleware"
 	"github.com/phoenix-agent-go/infra/config"
@@ -294,6 +298,116 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			pqGroup.POST("", pqHandler.Create)
 			pqGroup.PUT("", pqHandler.Update)
 			pqGroup.DELETE("/:id", pqHandler.Delete)
+		}
+		// ---- Chat - Session & Message Management ----
+		chatHandler := chat.NewChatHandler(dataSvc)
+		dataAPI.GET("/agent/:id/sessions", chatHandler.ListSessions)
+		dataAPI.POST("/agent/:id/sessions", chatHandler.CreateSession)
+		dataAPI.DELETE("/agent/:id/sessions", chatHandler.DeleteAllSessions)
+		dataAPI.GET("/sessions/:id/messages", chatHandler.GetMessages)
+		dataAPI.POST("/sessions/:id/messages", chatHandler.CreateMessage)
+		dataAPI.PUT("/sessions/:id/pin", chatHandler.PinSession)
+		dataAPI.PUT("/sessions/:id/rename", chatHandler.RenameSession)
+		dataAPI.DELETE("/sessions/:id", chatHandler.DeleteSession)
+		dataAPI.POST("/sessions/:id/reports/html", chatHandler.GenerateReportHTML)
+
+		// ---- Graph Search (SSE) ----
+		graphHandler := chat.NewGraphHandler(dataSvc)
+		dataAPI.GET("/stream/search", graphHandler.StreamSearch)
+
+		// ---- Session Events (SSE) ----
+		sessionEventHandler := chat.NewSessionEventHandler(dataSvc)
+		dataAPI.GET("/agent/:agentId/sessions/stream", sessionEventHandler.StreamSessions)
+
+		// ---- Datasource Management ----
+		dsDataHandler := datasourceHandler.NewDatasourceHandler(dataSvc)
+		dsDataGroup := dataAPI.Group("/datasource")
+		{
+			dsDataGroup.GET("/types", dsDataHandler.GetTypes)
+			dsDataGroup.GET("/", dsDataHandler.List)
+			dsDataGroup.GET("/:id", dsDataHandler.GetByID)
+			dsDataGroup.GET("/:id/tables", dsDataHandler.GetTables)
+			dsDataGroup.GET("/:id/tables/:tableName/columns", dsDataHandler.GetColumns)
+			dsDataGroup.POST("", dsDataHandler.Create)
+			dsDataGroup.PUT("/:id", dsDataHandler.Update)
+			dsDataGroup.DELETE("/:id", dsDataHandler.Delete)
+			dsDataGroup.POST("/:id/test", dsDataHandler.TestConnection)
+			dsDataGroup.GET("/:id/logical-relations", dsDataHandler.ListLogicalRelations)
+			dsDataGroup.POST("/:id/logical-relations", dsDataHandler.CreateLogicalRelation)
+			dsDataGroup.PUT("/:id/logical-relations", dsDataHandler.UpdateLogicalRelation)
+			dsDataGroup.DELETE("/:id/logical-relations", dsDataHandler.DeleteLogicalRelation)
+		}
+
+		// ---- Model Configuration ----
+		mcHandler := modelconfig.NewModelConfigHandler(dataSvc)
+		mcGroup := dataAPI.Group("/model-config")
+		{
+			mcGroup.GET("/list", mcHandler.List)
+			mcGroup.POST("/add", mcHandler.Add)
+			mcGroup.PUT("/update", mcHandler.Update)
+			mcGroup.DELETE("/:id", mcHandler.Delete)
+			mcGroup.POST("/activate/:id", mcHandler.Activate)
+			mcGroup.POST("/test", mcHandler.Test)
+			mcGroup.GET("/check-ready", mcHandler.CheckReady)
+		}
+
+		// ---- Prompt Configuration ----
+		pcHandler := prompt.NewPromptConfigHandler(dataSvc)
+		pcGroup := dataAPI.Group("/prompt-config")
+		{
+			pcGroup.POST("/save", pcHandler.Save)
+			pcGroup.GET("/:id", pcHandler.GetByID)
+			pcGroup.GET("/list", pcHandler.List)
+			pcGroup.GET("/list-by-type/:type", pcHandler.ListByType)
+			pcGroup.GET("/active/:type", pcHandler.GetActiveByType)
+			pcGroup.GET("/active-all/:type", pcHandler.GetActiveAllByType)
+			pcGroup.DELETE("/:id", pcHandler.Delete)
+			pcGroup.POST("/:id/enable", pcHandler.Enable)
+			pcGroup.POST("/:id/disable", pcHandler.Disable)
+			pcGroup.GET("/types", pcHandler.GetTypes)
+			pcGroup.POST("/batch-enable", pcHandler.BatchEnable)
+			pcGroup.POST("/batch-disable", pcHandler.BatchDisable)
+			pcGroup.POST("/:id/priority", pcHandler.SetPriority)
+			pcGroup.POST("/:id/display-order", pcHandler.SetDisplayOrder)
+		}
+
+		// ---- Semantic Model ----
+		smHandler := semanticmodelHandler.NewSemanticModelHandler(dataSvc)
+		smGroup := dataAPI.Group("/semantic-model")
+		{
+			smGroup.GET("/", smHandler.List)
+			smGroup.GET("/:id", smHandler.GetByID)
+			smGroup.POST("", smHandler.Create)
+			smGroup.PUT("/:id", smHandler.Update)
+			smGroup.DELETE("/:id", smHandler.Delete)
+			smGroup.DELETE("/batch", smHandler.BatchDelete)
+			smGroup.PUT("/enable", smHandler.Enable)
+			smGroup.PUT("/disable", smHandler.Disable)
+			smGroup.POST("/batch-import", smHandler.BatchImport)
+			smGroup.GET("/template/download", smHandler.DownloadTemplate)
+			smGroup.POST("/import/excel", smHandler.ImportExcel)
+		}
+
+		// ---- Business Knowledge ----
+		bkHandler := knowledgeHandler.NewBusinessKnowledgeHandler(dataSvc)
+		bkGroup := dataAPI.Group("/business-knowledge")
+		{
+			bkGroup.GET("/", bkHandler.List)
+			bkGroup.GET("/:id", bkHandler.GetByID)
+			bkGroup.POST("", bkHandler.Create)
+			bkGroup.PUT("/:id", bkHandler.Update)
+			bkGroup.DELETE("/:id", bkHandler.Delete)
+			bkGroup.POST("/recall/:id", bkHandler.Recall)
+			bkGroup.POST("/refresh-vector-store", bkHandler.RefreshVectorStore)
+			bkGroup.POST("/retry-embedding/:id", bkHandler.RetryEmbedding)
+		}
+
+		// ---- File Upload ----
+		uploadHandler := common.NewFileUploadHandler()
+		uploadGroup := dataAPI.Group("/upload")
+		{
+			uploadGroup.POST("/avatar", uploadHandler.UploadAvatar)
+			uploadGroup.GET("/*filepath", uploadHandler.GetFile)
 		}
 	}
 
