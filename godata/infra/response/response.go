@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/infra/errcode"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Response struct {
@@ -27,6 +28,11 @@ type PageResponse struct {
 func getTraceID(c *gin.Context) string {
 	if tid := c.GetString("trace_id"); tid != "" {
 		return tid
+	}
+	// 从 OTel span 上下文中获取 trace ID
+	span := trace.SpanFromContext(c.Request.Context())
+	if span.SpanContext().HasTraceID() {
+		return span.SpanContext().TraceID().String()
 	}
 	return ""
 }

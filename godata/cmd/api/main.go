@@ -42,7 +42,8 @@ func main() {
 	tp, err := monitoring.InitTracer(ctx, &cfg.Monitor)
 	if err != nil {
 		zap.L().Warn("failed to init tracer", zap.Error(err))
-	} else {
+	}
+	if tp != nil {
 		defer func() {
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
