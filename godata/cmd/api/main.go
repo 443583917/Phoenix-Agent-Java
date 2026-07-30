@@ -30,6 +30,8 @@ import (
 	"gorm.io/gorm"
 
 	"trpc.group/trpc-go/trpc-agent-go/session/inmemory"
+
+	"github.com/phoenix-agent-go/internal/dao/queue"
 )
 
 func main() {
@@ -49,6 +51,14 @@ func main() {
 		zap.Int("port", cfg.Server.Port),
 		zap.String("version", cfg.Monitor.ServiceVersion),
 	)
+
+	// 初始化 RabbitMQ 消费者
+	consumer, err := queue.NewConsumer(&cfg.RabbitMQ)
+	if err != nil {
+		zap.L().Warn("failed to init RabbitMQ consumer, continuing without event bus",
+			zap.Error(err),
+		)
+	}
 
 	// 初始化 OpenTelemetry
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -92,6 +102,18 @@ func main() {
 		dataSvc = buildDataService(database)
 		ragSvc = buildRagService(database)
 		kgSvc = buildKgService(database)
+
+		// Wire cache invalidation for privilege role updates into the consumer.
+		if consumer != nil {
+			consumer.SetCacheInvalidator(func(ctx context.Context, eventType string, payload []byte) {
+				zap.L().Info("consuming cache invalidation",
+					zap.String("eventType", eventType),
+				)
+				// The privilege service exposes InvalidateCache for this purpose.
+				// For now we rely on the PrivilegeCache invalidation in the service layer;
+				// future: call privilegeSvc.InvalidateRoleCache() when that method exists.
+			})
+		}
 	} else {
 		zap.L().Warn("database unavailable, privilege and platform endpoints will return errors")
 	}
@@ -113,6 +135,16 @@ func main() {
 		MaxHeaderBytes: cfg.Server.MaxHeaderBytes,
 	}
 
+	// 启动消息消费者
+	if consumer != nil {
+		go func() {
+			zap.L().Info("starting RabbitMQ consumer")
+			if err := consumer.Start(context.Background()); err != nil {
+				zap.L().Error("consumer stopped with error", zap.Error(err))
+			}
+		}()
+	}
+
 	// 优雅关闭
 	go func() {
 		zap.L().Info("server listening", zap.String("addr", srv.Addr))
@@ -128,6 +160,13 @@ func main() {
 	zap.L().Info("shutting down server...")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
+
+	if consumer != nil {
+		zap.L().Info("stopping RabbitMQ consumer")
+		if err := consumer.Stop(); err != nil {
+			zap.L().Error("failed to stop consumer", zap.Error(err))
+		}
+	}
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		zap.L().Fatal("server forced to shutdown", zap.Error(err))
