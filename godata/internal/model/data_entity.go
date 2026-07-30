@@ -75,7 +75,7 @@ func (AgentDatasource) TableName() string { return "tbl_data_agent_datasource" }
 type AgentDatasourceTables struct {
 	BaseModel
 	AgentDatasourceId int    `gorm:"column:agent_datasource_id" json:"agentDatasourceId"`
-	Table string `gorm:"column:table_name;type:varchar(256)" json:"tableName"`
+	Table             string `gorm:"column:table_name;type:varchar(256)" json:"tableName"`
 }
 
 func (AgentDatasourceTables) TableName() string { return "tbl_data_agent_datasource_tables" }
@@ -198,13 +198,13 @@ func (Datasource) TableName() string { return "tbl_data_datasource" }
 
 type LogicalRelation struct {
 	BaseModel
-	DatasourceId      int    `gorm:"column:datasource_id" json:"datasourceId"`
-	SourceTable string `gorm:"column:source_table_name;type:varchar(128)" json:"sourceTableName"`
-	SourceColumnName  string `gorm:"column:source_column_name;type:varchar(128)" json:"sourceColumnName"`
-	TargetTable string `gorm:"column:target_table_name;type:varchar(128)" json:"targetTableName"`
-	TargetColumnName  string `gorm:"column:target_column_name;type:varchar(128)" json:"targetColumnName"`
-	RelationType      string `gorm:"column:relation_type;type:varchar(16)" json:"relationType"`
-	Description       string `gorm:"column:description;type:varchar(512)" json:"description"`
+	DatasourceId     int    `gorm:"column:datasource_id" json:"datasourceId"`
+	SourceTableName  string `gorm:"column:source_table_name;type:varchar(128)" json:"sourceTableName"`
+	SourceColumnName string `gorm:"column:source_column_name;type:varchar(128)" json:"sourceColumnName"`
+	TargetTableName  string `gorm:"column:target_table_name;type:varchar(128)" json:"targetTableName"`
+	TargetColumnName string `gorm:"column:target_column_name;type:varchar(128)" json:"targetColumnName"`
+	RelationType     string `gorm:"column:relation_type;type:varchar(16)" json:"relationType"`
+	Description      string `gorm:"column:description;type:varchar(512)" json:"description"`
 }
 
 func (LogicalRelation) TableName() string { return "tbl_data_logical_relation" }
@@ -216,21 +216,21 @@ func (LogicalRelation) TableName() string { return "tbl_data_logical_relation" }
 
 type ModelConfig struct {
 	BaseModel
-	Provider         string   `gorm:"column:provider;type:varchar(64)" json:"provider"`
-	BaseUrl          string   `gorm:"column:base_url;type:varchar(512)" json:"baseUrl"`
-	ApiKey           string   `gorm:"column:api_key;type:varchar(512)" json:"-"`
-	ModelName        string   `gorm:"column:model_name;type:varchar(128)" json:"modelName"`
-	Temperature      float64  `gorm:"column:temperature;type:decimal(3,2);default:0" json:"temperature"`
-	IsActive         bool     `gorm:"column:is_active;default:false" json:"isActive"`
-	MaxTokens        int      `gorm:"column:max_tokens;default:0" json:"maxTokens"`
-	ModelType        string   `gorm:"column:model_type;type:varchar(32)" json:"modelType"`
-	CompletionsPath  string   `gorm:"column:completions_path;type:varchar(256)" json:"completionsPath"`
-	EmbeddingsPath   string   `gorm:"column:embeddings_path;type:varchar(256)" json:"embeddingsPath"`
-	ProxyEnabled     *bool    `gorm:"column:proxy_enabled;default:false" json:"proxyEnabled"`
-	ProxyHost        string   `gorm:"column:proxy_host;type:varchar(256)" json:"proxyHost"`
-	ProxyPort        int      `gorm:"column:proxy_port" json:"proxyPort"`
-	ProxyUsername    string   `gorm:"column:proxy_username;type:varchar(128)" json:"proxyUsername"`
-	ProxyPassword    string   `gorm:"column:proxy_password;type:varchar(256)" json:"-"`
+	Provider        string  `gorm:"column:provider;type:varchar(64)" json:"provider"`
+	BaseUrl         string  `gorm:"column:base_url;type:varchar(512)" json:"baseUrl"`
+	ApiKey          string  `gorm:"column:api_key;type:varchar(512)" json:"-"`
+	ModelName       string  `gorm:"column:model_name;type:varchar(128)" json:"modelName"`
+	Temperature     float64 `gorm:"column:temperature;type:decimal(3,2);default:0" json:"temperature"`
+	IsActive        bool    `gorm:"column:is_active;default:false" json:"isActive"`
+	MaxTokens       int     `gorm:"column:max_tokens;default:0" json:"maxTokens"`
+	ModelType       string  `gorm:"column:model_type;type:varchar(32)" json:"modelType"`
+	CompletionsPath string  `gorm:"column:completions_path;type:varchar(256)" json:"completionsPath"`
+	EmbeddingsPath  string  `gorm:"column:embeddings_path;type:varchar(256)" json:"embeddingsPath"`
+	ProxyEnabled    *bool   `gorm:"column:proxy_enabled;default:false" json:"proxyEnabled"`
+	ProxyHost       string  `gorm:"column:proxy_host;type:varchar(256)" json:"proxyHost"`
+	ProxyPort       int     `gorm:"column:proxy_port" json:"proxyPort"`
+	ProxyUsername   string  `gorm:"column:proxy_username;type:varchar(128)" json:"proxyUsername"`
+	ProxyPassword   string  `gorm:"column:proxy_password;type:varchar(256)" json:"-"`
 }
 
 func (ModelConfig) TableName() string { return "tbl_data_model_config" }
@@ -242,16 +242,16 @@ func (ModelConfig) TableName() string { return "tbl_data_model_config" }
 
 type SemanticModel struct {
 	BaseModel
-	AgentId            int64  `gorm:"column:agent_id" json:"agentId"`
-	DatasourceId       int    `gorm:"column:datasource_id" json:"datasourceId"`
-	Table string `gorm:"column:table_name;type:varchar(128)" json:"tableName"`
-	ColumnName         string `gorm:"column:column_name;type:varchar(128)" json:"columnName"`
-	BusinessName       string `gorm:"column:business_name;type:varchar(256)" json:"businessName"`
-	Synonyms           string `gorm:"column:synonyms;type:varchar(512)" json:"synonyms"`
+	AgentId             int64  `gorm:"column:agent_id" json:"agentId"`
+	DatasourceId        int    `gorm:"column:datasource_id" json:"datasourceId"`
+	Table               string `gorm:"column:table_name;type:varchar(128)" json:"tableName"`
+	ColumnName          string `gorm:"column:column_name;type:varchar(128)" json:"columnName"`
+	BusinessName        string `gorm:"column:business_name;type:varchar(256)" json:"businessName"`
+	Synonyms            string `gorm:"column:synonyms;type:varchar(512)" json:"synonyms"`
 	BusinessDescription string `gorm:"column:business_description;type:text" json:"businessDescription"`
-	ColumnComment      string `gorm:"column:column_comment;type:varchar(512)" json:"columnComment"`
-	DataType           string `gorm:"column:data_type;type:varchar(64)" json:"dataType"`
-	Status             int    `gorm:"column:status;default:1" json:"status"`
+	ColumnComment       string `gorm:"column:column_comment;type:varchar(512)" json:"columnComment"`
+	DataType            string `gorm:"column:data_type;type:varchar(64)" json:"dataType"`
+	Status              int    `gorm:"column:status;default:1" json:"status"`
 }
 
 func (SemanticModel) TableName() string { return "tbl_data_semantic_model" }
