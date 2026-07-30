@@ -125,9 +125,9 @@ func (h *RoleHandler) Delete(c *gin.Context) {
 }
 
 // GetAcls returns the ACL entries for a role.
-// GET /api/privilege/role/:roleId/acls
+// GET /api/privilege/role/:id/acls
 func (h *RoleHandler) GetAcls(c *gin.Context) {
-	acls, err := h.svc.GetRoleAcls(c.Request.Context(), c.Param("roleId"))
+	acls, err := h.svc.GetRoleAcls(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		response.Error(c, errcode.InternalError)
 		return

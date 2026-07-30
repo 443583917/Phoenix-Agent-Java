@@ -73,7 +73,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			roleGroup.POST("", roleHandler.Create)
 			roleGroup.PUT("", roleHandler.Update)
 			roleGroup.DELETE("/:id", roleHandler.Delete)
-			roleGroup.GET("/:roleId/acls", roleHandler.GetAcls)
+			roleGroup.GET("/:id/acls", roleHandler.GetAcls)
 		}
 
 		// 用户-角色关联管理

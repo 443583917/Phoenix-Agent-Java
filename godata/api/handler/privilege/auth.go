@@ -41,6 +41,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	if h.svc == nil {
+		response.ErrorWithMsg(c, errcode.ErrCode{Code: 500}, "service not available")
+		return
+	}
+
 	ip := c.ClientIP()
 	userInfo, err := h.svc.Login(c.Request.Context(), dto, ip)
 	if err != nil {
@@ -67,6 +72,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // Menus returns the current user's menu tree.
 // GET /api/privilege/auth/menus
 func (h *AuthHandler) Menus(c *gin.Context) {
+	if h.svc == nil {
+		response.ErrorWithMsg(c, errcode.ErrCode{Code: 500}, "service not available")
+		return
+	}
 	userID, _ := c.Get("user_id")
 	userIDStr := strconv.FormatUint(userID.(uint64), 10)
 
@@ -81,6 +90,10 @@ func (h *AuthHandler) Menus(c *gin.Context) {
 // GetLoginUserInfo returns the current user's profile.
 // GET /api/privilege/auth/getLoginUserInfo
 func (h *AuthHandler) GetLoginUserInfo(c *gin.Context) {
+	if h.svc == nil {
+		response.ErrorWithMsg(c, errcode.ErrCode{Code: 500}, "service not available")
+		return
+	}
 	userID, _ := c.Get("user_id")
 	userIDStr := strconv.FormatUint(userID.(uint64), 10)
 

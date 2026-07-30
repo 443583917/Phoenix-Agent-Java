@@ -13,11 +13,19 @@ import (
 
 	"github.com/casbin/casbin/v2"
 	"github.com/phoenix-agent-go/api"
+	infraCache "github.com/phoenix-agent-go/infra/cache"
 	"github.com/phoenix-agent-go/infra/config"
 	"github.com/phoenix-agent-go/infra/jwt"
+	internalConfig "github.com/phoenix-agent-go/internal/config"
 	"github.com/phoenix-agent-go/infra/logger"
 	"github.com/phoenix-agent-go/infra/monitoring"
+	cachePkg "github.com/phoenix-agent-go/internal/dao/cache"
+	"github.com/phoenix-agent-go/internal/dao/db"
+	"github.com/phoenix-agent-go/internal/service"
+	"github.com/phoenix-agent-go/internal/usecase"
 	"go.uber.org/zap"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -65,8 +73,19 @@ func main() {
 	}
 	defer enforcer.EnableEnforce(false)
 
+	// 初始化数据库
+	database := initDB(&cfg.DB)
+
+	// 构建特权模块依赖链
+	var privilegeSvc *service.PrivilegeService
+	if database != nil {
+		privilegeSvc = buildPrivilegeService(database, cfg)
+	} else {
+		zap.L().Warn("database unavailable, privilege endpoints will return errors")
+	}
+
 	// 设置路由
-	router := api.SetupRouter(cfg, jwtManager, enforcer, nil) // TODO: inject privilegeSvc when dependency chain is initialized
+	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc)
 
 	// 启动服务
 	srv := &http.Server{
@@ -99,3 +118,82 @@ func main() {
 
 	zap.L().Info("server stopped")
 }
+
+// initDB attempts to connect to PostgreSQL. If the connection fails, it logs
+// a warning and returns nil so the server can still start (e.g. for /echo).
+func initDB(cfg *internalConfig.DBConfig) *gorm.DB {
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name, cfg.SSLMode)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		SkipDefaultTransaction: true,
+	})
+	if err != nil {
+		zap.L().Warn("database connection failed, privilege module will be unavailable", zap.Error(err))
+		return nil
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		zap.L().Warn("failed to get underlying sql.DB", zap.Error(err))
+		return nil
+	}
+
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+
+	zap.L().Info("database connected",
+		zap.String("host", cfg.Host),
+		zap.Int("port", cfg.Port),
+		zap.String("dbname", cfg.Name),
+	)
+	return db
+}
+
+// buildPrivilegeService constructs the full privilege dependency chain:
+// repos → cache → usecase → service.
+func buildPrivilegeService(database *gorm.DB, cfg *config.AppConfig) *service.PrivilegeService {
+	// Initialize cache (Redis + BigCache)
+	var privilegeCache *cachePkg.PrivilegeCache
+	if rdb, err := infraCache.InitRedis(&cfg.Redis); err == nil {
+		local, err := infraCache.InitBigCache()
+		if err != nil {
+			zap.L().Warn("failed to init BigCache, using memory-only cache", zap.Error(err))
+			local = nil
+		}
+		privilegeCache = cachePkg.NewPrivilegeCache(rdb, local)
+		zap.L().Info("cache initialized (Redis + BigCache)")
+	} else {
+		zap.L().Warn("redis unavailable, caching disabled", zap.Error(err))
+		// Still create a cache without Redis/BigCache — operations degrade gracefully.
+		local, _ := infraCache.InitBigCache()
+		if local != nil {
+			privilegeCache = cachePkg.NewPrivilegeCache(nil, local)
+		}
+	}
+
+	// Initialize all repositories
+	userRepo := db.NewUserRepository(database)
+	roleRepo := db.NewRoleRepository(database)
+	userRoleRepo := db.NewUserRoleRepository(database)
+	moduleRepo := db.NewModuleRepository(database)
+	aclRepo := db.NewACLRepository(database)
+	deptRepo := db.NewDepartmentRepository(database)
+	companyRepo := db.NewCompanyRepository(database)
+	employeeRepo := db.NewEmployeeRepository(database)
+	dictRepo := db.NewDictionaryRepository(database)
+	pvalueRepo := db.NewPvalueRepository(database)
+	loginLogRepo := db.NewLoginLogRepository(database)
+
+	// Initialize usecase
+	uc := usecase.NewPrivilegeUsecase(
+		userRepo, roleRepo, userRoleRepo, moduleRepo, aclRepo,
+		deptRepo, companyRepo, employeeRepo, dictRepo, pvalueRepo, loginLogRepo,
+		privilegeCache,
+	)
+
+	// Initialize service
+	return service.NewPrivilegeService(uc)
+}
+
