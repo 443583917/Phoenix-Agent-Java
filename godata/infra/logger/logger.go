@@ -31,6 +31,9 @@ func Init(cfg *config.MonitorConfig) error {
 		zapCfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 		logger, err = zapCfg.Build(zap.AddCallerSkip(1))
+		if err == nil {
+			zap.ReplaceGlobals(logger)
+		}
 	})
 	return err
 }

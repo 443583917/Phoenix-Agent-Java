@@ -48,3 +48,10 @@ clean-deploy-all-local.bat
 /phoenix-agent/.flattened-pom.xml
 .DS_Store
 .agentscope
+
+### Go ###
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
