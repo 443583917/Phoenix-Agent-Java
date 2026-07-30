@@ -1,11 +1,38 @@
 package middleware
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+	"strings"
 
-// Auth JWT + OAuth2 认证中间件 — Phase 1 为骨架，Phase 2 实现
-func Auth() gin.HandlerFunc {
+	"github.com/gin-gonic/gin"
+	"github.com/phoenix-agent-go/infra/errcode"
+	"github.com/phoenix-agent-go/infra/jwt"
+	"github.com/phoenix-agent-go/infra/response"
+)
+
+// Auth JWT 认证中间件
+func Auth(jwtManager *jwt.JWTManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO Phase 2: JWT 验证 + Casbin 加载角色
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			response.Error(c, errcode.Unauthorized)
+			c.Abort()
+			return
+		}
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			response.Error(c, errcode.Unauthorized)
+			c.Abort()
+			return
+		}
+		claims, err := jwtManager.ParseToken(parts[1])
+		if err != nil {
+			response.ErrorWithStatus(c, http.StatusUnauthorized, errcode.Unauthorized)
+			c.Abort()
+			return
+		}
+		c.Set("user_id", claims.UserID)
+		c.Set("username", claims.Username)
 		c.Next()
 	}
 }

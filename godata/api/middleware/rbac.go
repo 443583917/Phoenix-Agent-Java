@@ -1,11 +1,26 @@
 package middleware
 
-import "github.com/gin-gonic/gin"
+import (
+	"fmt"
 
-// RBAC Casbin 权限中间件 — Phase 1 为骨架，Phase 2 实现
-func RBAC() gin.HandlerFunc {
+	"github.com/casbin/casbin/v2"
+	"github.com/gin-gonic/gin"
+	"github.com/phoenix-agent-go/infra/errcode"
+	"github.com/phoenix-agent-go/infra/response"
+)
+
+// RBAC Casbin 权限中间件
+func RBAC(enforcer *casbin.Enforcer) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO Phase 2: Casbin enforce
+		userID, _ := c.Get("user_id")
+		obj := c.Request.URL.Path
+		act := c.Request.Method
+		ok, err := enforcer.Enforce(fmt.Sprint(userID), obj, act)
+		if err != nil || !ok {
+			response.Error(c, errcode.Forbidden)
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

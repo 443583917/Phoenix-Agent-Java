@@ -22,3 +22,6 @@ cors:
     - "Content-Length"
   allow_credentials: true
   max_age: "12h"
+auth:
+  secret: "${JWT_SECRET}"
+  expire: "24h"

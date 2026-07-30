@@ -7,11 +7,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/casbin/casbin/v2"
 	"github.com/phoenix-agent-go/api"
 	"github.com/phoenix-agent-go/infra/config"
+	"github.com/phoenix-agent-go/infra/jwt"
 	"github.com/phoenix-agent-go/infra/logger"
 	"github.com/phoenix-agent-go/infra/monitoring"
 	"go.uber.org/zap"
@@ -51,8 +54,19 @@ func main() {
 		}()
 	}
 
+	// 初始化 JWT 管理器
+	jwtManager := jwt.NewJWTManager(cfg.Auth.Secret, cfg.Auth.Expire)
+
+	// 初始化 Casbin 权限管理器
+	modelPath := filepath.Join("internal", "config", "casbin_model.conf")
+	enforcer, err := casbin.NewEnforcer(modelPath)
+	if err != nil {
+		zap.L().Fatal("failed to init casbin enforcer", zap.Error(err))
+	}
+	defer enforcer.EnableEnforce(false)
+
 	// 设置路由
-	router := api.SetupRouter(cfg)
+	router := api.SetupRouter(cfg, jwtManager, enforcer)
 
 	// 启动服务
 	srv := &http.Server{

@@ -20,6 +20,7 @@ type AppConfig struct {
 	Agent    appcfg.AgentConfig
 	RPC      appcfg.RPCConfig
 	Cors     appcfg.CorsConfig
+	Auth     appcfg.AuthConfig
 }
 
 func Load(serviceName string) (*AppConfig, error) {
@@ -101,6 +102,9 @@ func Load(serviceName string) (*AppConfig, error) {
 		return nil, err
 	}
 	if err := v.UnmarshalKey("rpc", &cfg.RPC); err != nil {
+		return nil, err
+	}
+	if err := v.UnmarshalKey("auth", &cfg.Auth); err != nil {
 		return nil, err
 	}
 

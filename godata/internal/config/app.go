@@ -10,6 +10,11 @@ type ServerConfig struct {
 	MaxHeaderBytes int           `mapstructure:"max_header_bytes"`
 }
 
+type AuthConfig struct {
+	Secret string        `mapstructure:"secret"`
+	Expire time.Duration `mapstructure:"expire"`
+}
+
 type CorsConfig struct {
 	AllowOrigins     []string      `mapstructure:"allow_origins"`
 	AllowMethods     []string      `mapstructure:"allow_methods"`

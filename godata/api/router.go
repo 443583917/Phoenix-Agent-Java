@@ -3,13 +3,15 @@ package api
 import (
 	"net/http"
 
+	"github.com/casbin/casbin/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/api/middleware"
 	"github.com/phoenix-agent-go/infra/config"
+	"github.com/phoenix-agent-go/infra/jwt"
 	"github.com/phoenix-agent-go/infra/response"
 )
 
-func SetupRouter(cfg *config.AppConfig) *gin.Engine {
+func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -42,8 +44,8 @@ func SetupRouter(cfg *config.AppConfig) *gin.Engine {
 
 	// API 路由（需 JWT）
 	api := r.Group("/api")
-	api.Use(middleware.Auth())
-	api.Use(middleware.RBAC())
+	api.Use(middleware.Auth(jwtManager))
+	api.Use(middleware.RBAC(enforcer))
 	{
 		// Phase 4: agentGroup := api.Group("/agent")
 		// Phase 5: datasourceGroup := api.Group("/datasource")
@@ -53,7 +55,7 @@ func SetupRouter(cfg *config.AppConfig) *gin.Engine {
 
 	// 平台管理路由
 	platform := r.Group("/platform")
-	platform.Use(middleware.Auth())
+	platform.Use(middleware.Auth(jwtManager))
 	{
 		// Phase 3: platform handler registration
 		_ = platform
