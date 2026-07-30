@@ -5,6 +5,8 @@ import (
 
 	"github.com/casbin/casbin/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/phoenix-agent-go/api/handler/common"
+	"github.com/phoenix-agent-go/api/handler/platform"
 	"github.com/phoenix-agent-go/api/handler/privilege"
 	"github.com/phoenix-agent-go/api/middleware"
 	"github.com/phoenix-agent-go/infra/config"
@@ -13,7 +15,7 @@ import (
 	"github.com/phoenix-agent-go/internal/service"
 )
 
-func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService) *gin.Engine {
+func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -200,12 +202,122 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		// Phase 5: chatGroup := api.Group("")
 	}
 
-	// 平台管理路由
-	platform := r.Group("/platform")
-	platform.Use(middleware.Auth(jwtManager))
+	// 平台认证路由（仅 updatePassword 需要 JWT）
+	platformAuthHandler := platform.NewAccountLoginHandler(platformSvc, jwtManager)
+	platformAuth := r.Group("/auth")
 	{
-		// Phase 3: platform handler registration
-		_ = platform
+		platformAuth.POST("/login", platformAuthHandler.Login)
+		platformAuth.POST("/logout", platformAuthHandler.Logout)
+		platformAuth.POST("/thirdLogin", platformAuthHandler.ThirdLogin)
+		platformAuth.PUT("/updatePassword", middleware.Auth(jwtManager), platformAuthHandler.UpdatePassword)
+	}
+
+	// 平台管理路由
+	plat := r.Group("/platform")
+	plat.Use(middleware.Auth(jwtManager))
+	{
+		// ── GroupInfo ──
+		groupInfoHandler := platform.NewGroupInfoHandler(platformSvc)
+		group := plat.Group("/group-info")
+		{
+			group.GET("/page", groupInfoHandler.Page)
+			group.GET("/:id", groupInfoHandler.GetByID)
+			group.GET("/sn/:sn", groupInfoHandler.GetBySN)
+			group.POST("", groupInfoHandler.Create)
+			group.PUT("", groupInfoHandler.Update)
+			group.DELETE("/:id", groupInfoHandler.Delete)
+			group.PUT("/:id/toggle-status", groupInfoHandler.ToggleStatus)
+			group.DELETE("/:groupId/agent/:agentId", groupInfoHandler.RemoveAgent)
+		}
+
+		// ── GroupAgentInfo ──
+		gaHandler := platform.NewGroupAgentInfoHandler(platformSvc)
+		ga := plat.Group("/group-agent-info")
+		{
+			ga.GET("/page", gaHandler.Page)
+			ga.GET("/:id", gaHandler.GetByID)
+			ga.GET("/group/:groupId", gaHandler.GetByGroupID)
+			ga.GET("/agent/:agentId", gaHandler.GetByAgentID)
+			ga.POST("", gaHandler.Create)
+			ga.PUT("", gaHandler.Update)
+			ga.DELETE("/:id", gaHandler.Delete)
+			ga.DELETE("/group/:groupId/agent/:agentId", gaHandler.DeleteByGroupAndAgent)
+			ga.GET("/list", gaHandler.List)
+		}
+
+		// ── AccountInfo ──
+		acctHandler := platform.NewAccountInfoHandler(platformSvc)
+		acct := plat.Group("/account-info")
+		{
+			acct.GET("/page", acctHandler.Page)
+			acct.GET("/:id", acctHandler.GetByID)
+			acct.GET("/username/:username", acctHandler.GetByUsername)
+			acct.GET("/code/:code", acctHandler.GetByCode)
+			acct.GET("/third-party/:thirdPartyId", acctHandler.GetByThirdPartyID)
+			acct.GET("/list", acctHandler.List)
+			acct.GET("/getMyAgents", acctHandler.GetMyAgents)
+			acct.GET("/getUnGroupPageByGroupId", acctHandler.GetUnGroupPageByGroupId)
+			acct.POST("", acctHandler.Create)
+			acct.PUT("", acctHandler.Update)
+			acct.DELETE("/:id", acctHandler.Delete)
+			acct.PUT("/batch-status", acctHandler.BatchStatus)
+		}
+
+		// ── AccountGroupInfo ──
+		agHandler := platform.NewAccountGroupInfoHandler(platformSvc)
+		ag := plat.Group("/account-group-info")
+		{
+			ag.GET("/page", agHandler.Page)
+			ag.GET("/:id", agHandler.GetByID)
+			ag.POST("", agHandler.Create)
+			ag.PUT("", agHandler.Update)
+			ag.DELETE("/:id", agHandler.Delete)
+		}
+
+		// ── AccountTenantInfo ──
+		atHandler := platform.NewAccountTenantInfoHandler(platformSvc)
+		at := plat.Group("/account-tenant-info")
+		{
+			at.GET("/page", atHandler.Page)
+			at.GET("/:id", atHandler.GetByID)
+			at.POST("", atHandler.Create)
+			at.PUT("", atHandler.Update)
+			at.DELETE("/:id", atHandler.Delete)
+		}
+
+		// ── TenantInfo ──
+		tenantHandler := platform.NewTenantInfoHandler(platformSvc)
+		tenant := plat.Group("/tenant-info")
+		{
+			tenant.GET("/page", tenantHandler.Page)
+			tenant.GET("/:id", tenantHandler.GetByID)
+			tenant.POST("", tenantHandler.Create)
+			tenant.PUT("", tenantHandler.Update)
+			tenant.DELETE("/:id", tenantHandler.Delete)
+		}
+
+		// ── PlatformInfo (common) ──
+		piHandler := common.NewPlatformInfoHandler(platformSvc)
+		pi := plat.Group("/platform-info")
+		{
+			pi.GET("/page", piHandler.Page)
+			pi.GET("/:id", piHandler.GetByID)
+			pi.GET("/type/:type", piHandler.GetByType)
+			pi.GET("/type/:type/enabled", piHandler.GetByTypeEnabled)
+			pi.GET("/getEnabledPlatform", piHandler.GetEnabledPlatform)
+			pi.POST("", piHandler.Create)
+			pi.PUT("", piHandler.Update)
+			pi.DELETE("/:id", piHandler.Delete)
+		}
+
+		// ── Platform Sync (common stubs) ──
+		syncHandler := common.NewPlatformSyncHandler(platformSvc)
+		sync := plat.Group("/sync")
+		{
+			sync.POST("/all", syncHandler.SyncAll)
+			sync.POST("/departments", syncHandler.SyncDepartments)
+			sync.POST("/users", syncHandler.SyncUsers)
+		}
 	}
 
 	// 404

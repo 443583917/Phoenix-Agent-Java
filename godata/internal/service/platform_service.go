@@ -87,6 +87,10 @@ func (s *PlatformService) ListGroupAgentInfo(ctx context.Context) ([]*model.Grou
 	return s.uc.ListGroupAgentInfo(ctx)
 }
 
+func (s *PlatformService) PageGroupAgentInfo(ctx context.Context, page, size int, query *model.GroupAgentInfo) ([]*model.GroupAgentInfo, int64, error) {
+	return s.uc.PageGroupAgentInfo(ctx, page, size, query)
+}
+
 func (s *PlatformService) FindGroupAgentInfoByGroupID(ctx context.Context, groupID string) ([]*model.GroupAgentInfo, error) {
 	return s.uc.FindGroupAgentInfoByGroupID(ctx, groupID)
 }

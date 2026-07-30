@@ -26,6 +26,7 @@ type GroupAgentInfoRepository interface {
 	FindByGroupID(ctx context.Context, groupID string) ([]*model.GroupAgentInfo, error)
 	FindByAgentID(ctx context.Context, agentID int64) ([]*model.GroupAgentInfo, error)
 	GetByGroupIdAndAgentId(ctx context.Context, groupID string, agentID int64) (*model.GroupAgentInfo, error)
+	Page(ctx context.Context, page, size int, query *model.GroupAgentInfo) ([]*model.GroupAgentInfo, int64, error)
 	List(ctx context.Context) ([]*model.GroupAgentInfo, error)
 	Create(ctx context.Context, ga *model.GroupAgentInfo) error
 	Update(ctx context.Context, ga *model.GroupAgentInfo) error

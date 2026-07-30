@@ -224,6 +224,10 @@ func (u *PlatformUsecase) ListGroupAgentInfo(ctx context.Context) ([]*model.Grou
 	return u.groupAgentInfoRepo.List(ctx)
 }
 
+func (u *PlatformUsecase) PageGroupAgentInfo(ctx context.Context, page, size int, query *model.GroupAgentInfo) ([]*model.GroupAgentInfo, int64, error) {
+	return u.groupAgentInfoRepo.Page(ctx, page, size, query)
+}
+
 func (u *PlatformUsecase) FindGroupAgentInfoByGroupID(ctx context.Context, groupID string) ([]*model.GroupAgentInfo, error) {
 	return u.groupAgentInfoRepo.FindByGroupID(ctx, groupID)
 }

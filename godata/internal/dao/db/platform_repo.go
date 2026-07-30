@@ -127,6 +127,37 @@ func (r *groupAgentInfoRepo) GetByGroupIdAndAgentId(ctx context.Context, groupID
 	return &entity, err
 }
 
+func (r *groupAgentInfoRepo) Page(ctx context.Context, page, size int, query *model.GroupAgentInfo) ([]*model.GroupAgentInfo, int64, error) {
+	var list []*model.GroupAgentInfo
+	var total int64
+
+	dbQuery := r.db.WithContext(ctx).Model(&model.GroupAgentInfo{}).Where("del_flag = 0")
+	if query != nil {
+		if query.GroupID != "" {
+			dbQuery = dbQuery.Where("group_id = ?", query.GroupID)
+		}
+		if query.AgentID != 0 {
+			dbQuery = dbQuery.Where("agent_id = ?", query.AgentID)
+		}
+	}
+
+	if err := dbQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 20
+	}
+	offset := (page - 1) * size
+	if err := dbQuery.Offset(offset).Limit(size).Find(&list).Error; err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
 func (r *groupAgentInfoRepo) List(ctx context.Context) ([]*model.GroupAgentInfo, error) {
 	var list []*model.GroupAgentInfo
 	err := r.db.WithContext(ctx).Where("del_flag = 0").Find(&list).Error

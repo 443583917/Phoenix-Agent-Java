@@ -78,14 +78,16 @@ func main() {
 
 	// 构建特权模块依赖链
 	var privilegeSvc *service.PrivilegeService
+	var platformSvc *service.PlatformService
 	if database != nil {
 		privilegeSvc = buildPrivilegeService(database, cfg)
+		platformSvc = buildPlatformService(database)
 	} else {
-		zap.L().Warn("database unavailable, privilege endpoints will return errors")
+		zap.L().Warn("database unavailable, privilege and platform endpoints will return errors")
 	}
 
 	// 设置路由
-	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc)
+	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc)
 
 	// 启动服务
 	srv := &http.Server{
@@ -149,6 +151,25 @@ func initDB(cfg *internalConfig.DBConfig) *gorm.DB {
 		zap.String("dbname", cfg.Name),
 	)
 	return db
+}
+
+// buildPlatformService constructs the full platform dependency chain:
+// repos → usecase → service.
+func buildPlatformService(database *gorm.DB) *service.PlatformService {
+	groupInfoRepo := db.NewGroupInfoRepository(database)
+	groupAgentInfoRepo := db.NewGroupAgentInfoRepository(database)
+	accountInfoRepo := db.NewAccountInfoRepository(database)
+	accountGroupInfoRepo := db.NewAccountGroupInfoRepository(database)
+	accountTenantInfoRepo := db.NewAccountTenantInfoRepository(database)
+	tenantInfoRepo := db.NewTenantInfoRepository(database)
+	platformInfoRepo := db.NewPlatformInfoRepository(database)
+
+	uc := usecase.NewPlatformUsecase(
+		groupInfoRepo, groupAgentInfoRepo, accountInfoRepo,
+		accountGroupInfoRepo, accountTenantInfoRepo, tenantInfoRepo, platformInfoRepo,
+	)
+
+	return service.NewPlatformService(uc)
 }
 
 // buildPrivilegeService constructs the full privilege dependency chain:
