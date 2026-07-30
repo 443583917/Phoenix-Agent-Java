@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/phoenix-agent-go/agent/hooks"
+	"github.com/phoenix-agent-go/agent/interceptors"
+	"github.com/phoenix-agent-go/agent/memory"
 	"github.com/phoenix-agent-go/internal/model"
 
 	"trpc.group/trpc-go/trpc-agent-go/agent/llmagent"
@@ -21,16 +24,67 @@ import (
 // Each StreamCall creates a fresh tRPC-Agent-Go agent and runner instance
 // for request isolation. The session service is passed to the framework
 // Runner so conversation history is automatically managed.
+//
+// The manager also wires agent hooks (profile injection, call limiting,
+// summarization), an interceptor (login dedup + memory injection), and
+// the async memory pipeline for post-turn memory extraction.
 type AgentManager struct {
-	registry *AgentRegistry
-	sessSvc  *inmemory.SessionService
+	registry          *AgentRegistry
+	sessSvc           *inmemory.SessionService
+	memoryPipeline    *memory.MemoryPipeline
+	profileHook       *hooks.ProfileInjectionHook
+	limitHook         *hooks.ModelCallLimitHook
+	summarizationHook *hooks.SummarizationHook
+	loginInterceptor  *interceptors.LoginUserAgentInterceptor
+}
+
+// AgentManagerOption configures an AgentManager.
+type AgentManagerOption func(*AgentManager)
+
+// WithMemoryPipeline sets the memory pipeline for async memory extraction.
+func WithMemoryPipeline(p *memory.MemoryPipeline) AgentManagerOption {
+	return func(m *AgentManager) {
+		m.memoryPipeline = p
+	}
+}
+
+// WithProfileHook sets the profile injection hook.
+func WithProfileHook(h *hooks.ProfileInjectionHook) AgentManagerOption {
+	return func(m *AgentManager) {
+		m.profileHook = h
+	}
+}
+
+// WithLimitHook sets the model call limit hook.
+func WithLimitHook(h *hooks.ModelCallLimitHook) AgentManagerOption {
+	return func(m *AgentManager) {
+		m.limitHook = h
+	}
+}
+
+// WithSummarizationHook sets the summarization hook.
+func WithSummarizationHook(h *hooks.SummarizationHook) AgentManagerOption {
+	return func(m *AgentManager) {
+		m.summarizationHook = h
+	}
+}
+
+// WithLoginInterceptor sets the login interceptor.
+func WithLoginInterceptor(i *interceptors.LoginUserAgentInterceptor) AgentManagerOption {
+	return func(m *AgentManager) {
+		m.loginInterceptor = i
+	}
 }
 
 // NewAgentManager creates a new AgentManager with the given agent registry.
 // sessSvc is the tRPC-Agent-Go session service used for persisting
 // conversation events across runs.
-func NewAgentManager(registry *AgentRegistry, sessSvc *inmemory.SessionService) *AgentManager {
-	return &AgentManager{registry: registry, sessSvc: sessSvc}
+func NewAgentManager(registry *AgentRegistry, sessSvc *inmemory.SessionService, opts ...AgentManagerOption) *AgentManager {
+	m := &AgentManager{registry: registry, sessSvc: sessSvc}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 // Registry returns the underlying agent registry for external configuration.
@@ -51,6 +105,9 @@ func (m *AgentManager) GetSessionService() *inmemory.SessionService {
 //
 // The session service is passed to the framework Runner via
 // runner.WithSessionService so events are automatically persisted.
+//
+// After the run completes, the memory pipeline is invoked asynchronously
+// (fire-and-forget) to extract and persist user memories.
 func (m *AgentManager) StreamCall(
 	ctx context.Context,
 	req model.StreamRequest,
@@ -85,7 +142,10 @@ func (m *AgentManager) StreamCall(
 		genConfig.Temperature = &temp
 	}
 
-	// Build llmagent with tools if configured.
+	// Build model callbacks from hooks.
+	modelCallbacks := m.buildModelCallbacks()
+
+	// Build llmagent with tools, callbacks, and hooks if configured.
 	agentOpts := []llmagent.Option{
 		llmagent.WithModel(modelInstance),
 		llmagent.WithGenerationConfig(genConfig),
@@ -93,7 +153,27 @@ func (m *AgentManager) StreamCall(
 	if len(agentCfg.Tools) > 0 {
 		agentOpts = append(agentOpts, llmagent.WithTools(agentCfg.Tools))
 	}
+	if modelCallbacks != nil {
+		agentOpts = append(agentOpts, llmagent.WithModelCallbacks(modelCallbacks))
+	}
 	llmAgent := llmagent.New(req.AgentSN, agentOpts...)
+
+	// Enrich context with userID, sessionID, and agentSN for hooks/interceptors.
+	ctx = context.WithValue(ctx, "userID", req.UserID)
+	ctx = context.WithValue(ctx, "sessionID", req.SessionID)
+	ctx = context.WithValue(ctx, "agentSN", req.AgentSN)
+
+	// Apply login interceptor: inject history memories into the user message.
+	message := req.Message
+	if m.loginInterceptor != nil {
+		// Asynchronously record agent usage.
+		go m.loginInterceptor.RecordUsage(req.UserID, req.AgentSN)
+
+		// Inject relevant history memories if available.
+		if historyText := m.loginInterceptor.InjectHistoryMemories(ctx, req.UserID, req.Message); historyText != "" {
+			message = historyText + "\n\n【当前问题】\n" + req.Message
+		}
+	}
 
 	// Build runner options with session service for automatic event persistence.
 	runnerOpts := []runner.Option{}
@@ -104,7 +184,7 @@ func (m *AgentManager) StreamCall(
 	// Create runner and execute.
 	r := runner.NewRunner(req.AgentSN+"-app", llmAgent, runnerOpts...)
 	events, err := r.Run(
-		ctx, req.UserID, req.SessionID, tmodel.NewUserMessage(req.Message),
+		ctx, req.UserID, req.SessionID, tmodel.NewUserMessage(message),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("agent run: %w", err)
@@ -114,8 +194,18 @@ func (m *AgentManager) StreamCall(
 	ch := make(chan model.SSEEvent, 10)
 	go func() {
 		defer close(ch)
+		var userQuery string
 		for evt := range events {
 			sseEvent := convertRunnerEvent(evt)
+
+			// Accumulate user query or assistant response for memory extraction.
+			if evt.Response != nil && len(evt.Response.Choices) > 0 {
+				choice := evt.Response.Choices[0]
+				if choice.Delta.Content != "" {
+					userQuery += choice.Delta.Content
+				}
+			}
+
 			ch <- sseEvent
 		}
 		// Signal end of stream.
@@ -126,9 +216,50 @@ func (m *AgentManager) StreamCall(
 				End:     true,
 			},
 		}
+
+		// Fire-and-forget: trigger async memory extraction.
+		if m.memoryPipeline != nil {
+			go m.memoryPipeline.ProcessAndExtractMemory(
+				context.Background(),
+				req.UserID,
+				req.AgentSN,
+				req.Message,
+			)
+		}
+
+		// Reset hook state for this session after the run.
+		if m.limitHook != nil {
+			m.limitHook.Reset(req.SessionID)
+		}
+		if m.summarizationHook != nil {
+			m.summarizationHook.Reset(req.SessionID)
+		}
 	}()
 
 	return ch, nil
+}
+
+// buildModelCallbacks creates tRPC-Agent-Go model callbacks from the configured hooks.
+// Returns nil if no hooks are configured.
+func (m *AgentManager) buildModelCallbacks() *tmodel.Callbacks {
+	hasHooks := m.profileHook != nil || m.limitHook != nil || m.summarizationHook != nil
+	if !hasHooks {
+		return nil
+	}
+
+	callbacks := tmodel.NewCallbacks()
+
+	if m.profileHook != nil {
+		callbacks.RegisterBeforeModel(m.profileHook.BeforeModel)
+	}
+	if m.limitHook != nil {
+		callbacks.RegisterBeforeModel(m.limitHook.BeforeModel)
+	}
+	if m.summarizationHook != nil {
+		callbacks.RegisterBeforeModel(m.summarizationHook.BeforeModel)
+	}
+
+	return callbacks
 }
 
 // convertRunnerEvent converts a tRPC-Agent-Go runner Event to an SSEEvent.

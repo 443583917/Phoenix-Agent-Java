@@ -12,6 +12,10 @@ import (
 	"time"
 
 	"github.com/casbin/casbin/v2"
+	"github.com/redis/go-redis/v9"
+	"github.com/phoenix-agent-go/agent/hooks"
+	"github.com/phoenix-agent-go/agent/interceptors"
+	"github.com/phoenix-agent-go/agent/memory"
 	"github.com/phoenix-agent-go/agent/runner"
 	"github.com/phoenix-agent-go/agent/runtime"
 	"github.com/phoenix-agent-go/api"
@@ -29,6 +33,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	"trpc.group/trpc-go/trpc-agent-go/model/openai"
 	"trpc.group/trpc-go/trpc-agent-go/session/inmemory"
 
 	"github.com/phoenix-agent-go/internal/dao/queue"
@@ -90,6 +95,15 @@ func main() {
 	// 初始化数据库
 	database := initDB(&cfg.DB)
 
+	// 初始化 Redis (shared client for privilege cache, HITL cache, login interceptor)
+	var redisClient *redis.Client
+	if rdb, err := infraCache.InitRedis(&cfg.Redis); err == nil {
+		redisClient = rdb
+		zap.L().Info("redis connected")
+	} else {
+		zap.L().Warn("redis unavailable, some features will be degraded", zap.Error(err))
+	}
+
 	// 构建依赖链
 	var privilegeSvc *service.PrivilegeService
 	var platformSvc *service.PlatformService
@@ -97,7 +111,7 @@ func main() {
 	var ragSvc *service.RagService
 	var kgSvc *service.KgService
 	if database != nil {
-		privilegeSvc = buildPrivilegeService(database, cfg)
+		privilegeSvc = buildPrivilegeService(database, cfg, redisClient)
 		platformSvc = buildPlatformService(database)
 		dataSvc = buildDataService(database)
 		ragSvc = buildRagService(database)
@@ -118,9 +132,9 @@ func main() {
 		zap.L().Warn("database unavailable, privilege and platform endpoints will return errors")
 	}
 
-	// 初始化 Agent 框架 (session service, agent manager, HITL handler)
+	// 初始化 Agent 框架 (session service, agent manager, HITL handler, hooks, interceptors)
 	sessSvc := inmemory.NewSessionService()
-	agentManager := initAgentManager(cfg, sessSvc)
+	agentManager := initAgentManager(cfg, sessSvc, database, redisClient)
 	hitlHandler := runner.NewHitlHandler()
 
 	// 设置路由
@@ -175,9 +189,14 @@ func main() {
 	zap.L().Info("server stopped")
 }
 
-// initAgentManager creates and configures the AgentManager with a default agent
-// and the tRPC-Agent-Go session service for automatic conversation persistence.
-func initAgentManager(cfg *config.AppConfig, sessSvc *inmemory.SessionService) *runtime.AgentManager {
+// initAgentManager creates and configures the AgentManager with hooks,
+// interceptors, and the async memory pipeline.
+func initAgentManager(
+	cfg *config.AppConfig,
+	sessSvc *inmemory.SessionService,
+	database *gorm.DB,
+	redisClient *redis.Client,
+) *runtime.AgentManager {
 	registry := runtime.NewAgentRegistry()
 
 	// Register a default agent from config.
@@ -193,6 +212,62 @@ func initAgentManager(cfg *config.AppConfig, sessSvc *inmemory.SessionService) *
 	}
 	registry.Register(defaultAgent)
 
+	// Build manager options from available components.
+	var managerOpts []runtime.AgentManagerOption
+
+	if database != nil {
+		// Create repositories for agent memory infrastructure.
+		profileRepo := db.NewUserProfileRepository(database)
+		memoryRepo := db.NewUserMemoryRepository(database)
+		userAgentInfoRepo := db.NewUserAgentInfoRepository(database)
+
+		// Create the extraction model for memory pipeline and summarization hook.
+		extractionModel := openai.New(
+			cfg.Agent.Model.Model,
+			openai.WithVariant(openai.VariantDeepSeek),
+			openai.WithBaseURL(cfg.Agent.Model.BaseURL),
+			openai.WithAPIKey(cfg.Agent.Model.APIKey),
+		)
+
+		// Create long-term memory (vector store) for both memory pipeline and login interceptor.
+		longTermMemory := memory.NewLongTermMemory("phoenix")
+
+		// Wire profile injection hook.
+		profileHook := hooks.NewProfileInjectionHook(profileRepo)
+		managerOpts = append(managerOpts, runtime.WithProfileHook(profileHook))
+
+		// Wire model call limit hook (default 15 calls).
+		limitHook := hooks.NewModelCallLimitHook(15)
+		managerOpts = append(managerOpts, runtime.WithLimitHook(limitHook))
+
+		// Wire summarization hook (threshold 20 messages).
+		summarizationHook := hooks.NewSummarizationHook(extractionModel, 20)
+		managerOpts = append(managerOpts, runtime.WithSummarizationHook(summarizationHook))
+
+		// Wire login interceptor (Redis dedup, async usage recording, history memory injection).
+		loginInterceptor := interceptors.NewLoginUserAgentInterceptor(
+			redisClient, userAgentInfoRepo, longTermMemory,
+		)
+		managerOpts = append(managerOpts, runtime.WithLoginInterceptor(loginInterceptor))
+
+		// Wire memory pipeline for async memory extraction after each turn.
+		memoryPipeline := memory.NewMemoryPipeline(
+			extractionModel, profileRepo, memoryRepo, longTermMemory,
+		)
+		managerOpts = append(managerOpts, runtime.WithMemoryPipeline(memoryPipeline))
+
+		zap.L().Info("agent infrastructure initialized",
+			zap.Bool("profileHook", true),
+			zap.Bool("limitHook", true),
+			zap.Bool("summarizationHook", true),
+			zap.Bool("loginInterceptor", true),
+			zap.Bool("memoryPipeline", true),
+		)
+	} else {
+		zap.L().Warn("database unavailable, agent infrastructure hooks disabled")
+	}
+
+	// Register a default agent from config — already done above, but log the model info.
 	zap.L().Info("agent manager initialized",
 		zap.String("model", defaultAgent.ModelName),
 		zap.String("base_url", defaultAgent.BaseURL),
@@ -200,7 +275,7 @@ func initAgentManager(cfg *config.AppConfig, sessSvc *inmemory.SessionService) *
 		zap.Float64("temperature", defaultAgent.Temperature),
 	)
 
-	return runtime.NewAgentManager(registry, sessSvc)
+	return runtime.NewAgentManager(registry, sessSvc, managerOpts...)
 }
 
 // initDB attempts to connect to PostgreSQL. If the connection fails, it logs
@@ -236,7 +311,7 @@ func initDB(cfg *internalConfig.DBConfig) *gorm.DB {
 }
 
 // buildPlatformService constructs the full platform dependency chain:
-// repos → usecase → service.
+// repos -> usecase -> service.
 func buildPlatformService(database *gorm.DB) *service.PlatformService {
 	groupInfoRepo := db.NewGroupInfoRepository(database)
 	groupAgentInfoRepo := db.NewGroupAgentInfoRepository(database)
@@ -255,7 +330,7 @@ func buildPlatformService(database *gorm.DB) *service.PlatformService {
 }
 
 // buildDataService constructs the full data management dependency chain:
-// repos → usecase → service.
+// repos -> usecase -> service.
 func buildDataService(database *gorm.DB) *service.DataService {
 	agentRepo := db.NewAgentRepository(database)
 	agentCategoryRepo := db.NewAgentCategoryRepository(database)
@@ -273,7 +348,7 @@ func buildDataService(database *gorm.DB) *service.DataService {
 }
 
 // buildRagService constructs the RAG dependency chain:
-// repos → usecase → service.
+// repos -> usecase -> service.
 func buildRagService(database *gorm.DB) *service.RagService {
 	categoryRepo := db.NewRagCategoryRepository(database)
 	fileRepo := db.NewRagFileInfoRepository(database)
@@ -284,7 +359,7 @@ func buildRagService(database *gorm.DB) *service.RagService {
 }
 
 // buildKgService constructs the KG dependency chain:
-// repos → usecase → service.
+// repos -> usecase -> service.
 func buildKgService(database *gorm.DB) *service.KgService {
 	entityRepo := db.NewKGEntityRepository(database)
 	relationRepo := db.NewKGRelationRepository(database)
@@ -296,20 +371,20 @@ func buildKgService(database *gorm.DB) *service.KgService {
 }
 
 // buildPrivilegeService constructs the full privilege dependency chain:
-// repos → cache → usecase → service.
-func buildPrivilegeService(database *gorm.DB, cfg *config.AppConfig) *service.PrivilegeService {
+// repos -> cache -> usecase -> service.
+func buildPrivilegeService(database *gorm.DB, cfg *config.AppConfig, redisClient *redis.Client) *service.PrivilegeService {
 	// Initialize cache (Redis + BigCache)
 	var privilegeCache *cachePkg.PrivilegeCache
-	if rdb, err := infraCache.InitRedis(&cfg.Redis); err == nil {
+	if redisClient != nil {
 		local, err := infraCache.InitBigCache()
 		if err != nil {
 			zap.L().Warn("failed to init BigCache, using memory-only cache", zap.Error(err))
 			local = nil
 		}
-		privilegeCache = cachePkg.NewPrivilegeCache(rdb, local)
+		privilegeCache = cachePkg.NewPrivilegeCache(redisClient, local)
 		zap.L().Info("cache initialized (Redis + BigCache)")
 	} else {
-		zap.L().Warn("redis unavailable, caching disabled", zap.Error(err))
+		zap.L().Warn("redis unavailable, caching disabled")
 		// Still create a cache without Redis/BigCache — operations degrade gracefully.
 		local, _ := infraCache.InitBigCache()
 		if local != nil {
