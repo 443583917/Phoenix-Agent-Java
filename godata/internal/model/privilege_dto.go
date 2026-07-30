@@ -18,6 +18,7 @@ type PasswordUpdateDTO struct {
 
 // PrivilegeUserDTO — 用户创建/更新请求
 type PrivilegeUserDTO struct {
+	ID         string `json:"id"`
 	EmployeeID string `json:"employeeId"`
 	Code       string `json:"code"`
 	RealName   string `json:"realName"`

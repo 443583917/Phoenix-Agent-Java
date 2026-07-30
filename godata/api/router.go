@@ -49,10 +49,23 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 	api.Use(middleware.Auth(jwtManager))
 	api.Use(middleware.RBAC(enforcer))
 	{
+		// 用户管理
+		userHandler := privilege.NewUserHandler(privilegeSvc)
+		userGroup := api.Group("/privilege/user")
+		{
+			userGroup.GET("/page", userHandler.Page)
+			userGroup.GET("/:id", userHandler.GetByID)
+			userGroup.GET("/code/:code", userHandler.GetByCode)
+			userGroup.POST("", userHandler.Create)
+			userGroup.PUT("", userHandler.Update)
+			userGroup.DELETE("/:id", userHandler.Delete)
+			userGroup.PUT("/password", userHandler.UpdatePassword)
+			userGroup.PUT("/reset-password/:id", userHandler.ResetPassword)
+		}
+
 		// Phase 4: agentGroup := api.Group("/agent")
 		// Phase 5: datasourceGroup := api.Group("/datasource")
 		// Phase 5: chatGroup := api.Group("")
-		_ = api
 	}
 
 	// 平台管理路由
