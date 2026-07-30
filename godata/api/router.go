@@ -9,6 +9,8 @@ import (
 	"github.com/phoenix-agent-go/agent/runtime"
 	"github.com/phoenix-agent-go/api/handler/agent"
 	"github.com/phoenix-agent-go/api/handler/common"
+	datasourceHandler "github.com/phoenix-agent-go/api/handler/datasource"
+	knowledgeHandler "github.com/phoenix-agent-go/api/handler/knowledge"
 	"github.com/phoenix-agent-go/api/handler/platform"
 	"github.com/phoenix-agent-go/api/handler/privilege"
 	"github.com/phoenix-agent-go/api/middleware"
@@ -18,7 +20,7 @@ import (
 	"github.com/phoenix-agent-go/internal/service"
 )
 
-func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService, agentManager *runtime.AgentManager, hitlHandler *runner.HitlHandler) *gin.Engine {
+func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService, dataSvc *service.DataService, agentManager *runtime.AgentManager, hitlHandler *runner.HitlHandler) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -216,6 +218,82 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		{
 			harnessGroup.POST("/chat", harnessHandler.Chat)
 			harnessGroup.POST("/confirm", harnessHandler.Confirm)
+		}
+	}
+
+
+	// 数据管理路由（需 JWT）
+	dataAPI := r.Group("/api")
+	dataAPI.Use(middleware.Auth(jwtManager))
+	dataAPI.Use(middleware.RBAC(enforcer))
+	if dataSvc != nil {
+		// ---- Agent ----
+		agentDataHandler := agent.NewAgentHandler(dataSvc)
+		agentDataGroup := dataAPI.Group("/agent")
+		{
+			agentDataGroup.GET("/page", agentDataHandler.Page)
+			agentDataGroup.GET("/list", agentDataHandler.List)
+			agentDataGroup.GET("/:id", agentDataHandler.GetByID)
+			agentDataGroup.POST("", agentDataHandler.Create)
+			agentDataGroup.PUT("", agentDataHandler.Update)
+			agentDataGroup.DELETE("/:id", agentDataHandler.Delete)
+			agentDataGroup.POST("/:id/publish", agentDataHandler.Publish)
+			agentDataGroup.POST("/:id/offline", agentDataHandler.Offline)
+			agentDataGroup.POST("/:id/api-key/generate", agentDataHandler.GenerateAPIKey)
+			agentDataGroup.POST("/:id/api-key/reset", agentDataHandler.ResetAPIKey)
+			agentDataGroup.DELETE("/:id/api-key", agentDataHandler.DeleteAPIKey)
+			agentDataGroup.PUT("/:id/api-key/toggle", agentDataHandler.ToggleAPIKeyEnabled)
+			agentDataGroup.GET("/:id/api-key", agentDataHandler.GetAPIKeyMasked)
+		}
+
+		// ---- AgentCategory ----
+		categoryHandler := agent.NewAgentCategoryHandler(dataSvc)
+		categoryGroup := dataAPI.Group("/agent-category")
+		{
+			categoryGroup.GET("/page", categoryHandler.Page)
+			categoryGroup.GET("/tree", categoryHandler.Tree)
+			categoryGroup.GET("/:id", categoryHandler.GetByID)
+			categoryGroup.POST("", categoryHandler.Create)
+			categoryGroup.PUT("", categoryHandler.Update)
+			categoryGroup.DELETE("/:id", categoryHandler.Delete)
+		}
+
+		// ---- AgentDatasource (scoped under /api/agent/:agentId/datasource) ----
+		dsHandler := datasourceHandler.NewAgentDatasourceHandler(dataSvc)
+		dsGroup := dataAPI.Group("/agent/:agentId/datasource")
+		{
+			dsGroup.GET("/page", dsHandler.Page)
+			dsGroup.GET("/:id", dsHandler.GetByID)
+			dsGroup.POST("", dsHandler.Create)
+			dsGroup.PUT("", dsHandler.Update)
+			dsGroup.DELETE("/:id", dsHandler.Delete)
+			dsGroup.PUT("/:id/toggle", dsHandler.ToggleActive)
+			dsGroup.GET("/:id/tables", dsHandler.GetTables)
+			dsGroup.POST("/:id/tables", dsHandler.SaveTables)
+		}
+
+		// ---- AgentKnowledge ----
+		knHandler := knowledgeHandler.NewAgentKnowledgeHandler(dataSvc)
+		knGroup := dataAPI.Group("/agent-knowledge")
+		{
+			knGroup.GET("/page", knHandler.Page)
+			knGroup.GET("/:id", knHandler.GetByID)
+			knGroup.POST("", knHandler.Create)
+			knGroup.PUT("", knHandler.Update)
+			knGroup.DELETE("/:id", knHandler.Delete)
+			knGroup.PUT("/:id/recall-toggle", knHandler.ToggleRecall)
+			knGroup.POST("/:id/retry-embedding", knHandler.RetryEmbedding)
+		}
+
+		// ---- AgentPresetQuestion (scoped under /api/agent/:agentId/preset-question) ----
+		pqHandler := agent.NewAgentPresetQuestionHandler(dataSvc)
+		pqGroup := dataAPI.Group("/agent/:agentId/preset-question")
+		{
+			pqGroup.GET("/page", pqHandler.Page)
+			pqGroup.GET("/:id", pqHandler.GetByID)
+			pqGroup.POST("", pqHandler.Create)
+			pqGroup.PUT("", pqHandler.Update)
+			pqGroup.DELETE("/:id", pqHandler.Delete)
 		}
 	}
 

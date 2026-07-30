@@ -81,9 +81,11 @@ func main() {
 	// 构建特权模块依赖链
 	var privilegeSvc *service.PrivilegeService
 	var platformSvc *service.PlatformService
+	var dataSvc *service.DataService
 	if database != nil {
 		privilegeSvc = buildPrivilegeService(database, cfg)
 		platformSvc = buildPlatformService(database)
+		dataSvc = buildDataService(database)
 	} else {
 		zap.L().Warn("database unavailable, privilege and platform endpoints will return errors")
 	}
@@ -93,7 +95,7 @@ func main() {
 	hitlHandler := runner.NewHitlHandler()
 
 	// 设置路由
-	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc, agentManager, hitlHandler)
+	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc, dataSvc, agentManager, hitlHandler)
 
 	// 启动服务
 	srv := &http.Server{
@@ -203,6 +205,24 @@ func buildPlatformService(database *gorm.DB) *service.PlatformService {
 	)
 
 	return service.NewPlatformService(uc)
+}
+
+// buildDataService constructs the full data management dependency chain:
+// repos → usecase → service.
+func buildDataService(database *gorm.DB) *service.DataService {
+	agentRepo := db.NewAgentRepository(database)
+	agentCategoryRepo := db.NewAgentCategoryRepository(database)
+	agentDatasourceRepo := db.NewAgentDatasourceRepository(database)
+	agentKnowledgeRepo := db.NewAgentKnowledgeRepository(database)
+	agentPresetQuestionRepo := db.NewAgentPresetQuestionRepository(database)
+	agentDatasourceTablesRepo := db.NewAgentDatasourceTablesRepository(database)
+
+	uc := usecase.NewDataUsecase(
+		agentRepo, agentCategoryRepo, agentDatasourceRepo,
+		agentKnowledgeRepo, agentPresetQuestionRepo, agentDatasourceTablesRepo,
+	)
+
+	return service.NewDataService(uc)
 }
 
 // buildPrivilegeService constructs the full privilege dependency chain:
