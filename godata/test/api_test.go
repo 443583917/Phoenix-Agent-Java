@@ -42,7 +42,7 @@ func do(method, path string, body interface{}, headers map[string]string) (*http
 }
 
 type apiResp struct {
-	Code    int             `json:"code"`
+	Code    string          `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data"`
 	Token   string          `json:"token"`
@@ -72,8 +72,8 @@ func TestEcho(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("GET /echo: code=%d want 0", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("GET /echo: code=%s want 100", r.Code)
 	}
 	t.Log("✅ GET /echo")
 }
@@ -85,8 +85,8 @@ func TestCaptcha(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("GET /api/privilege/auth/captcha: code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("GET /api/privilege/auth/captcha: code=%s", r.Code)
 	}
 	// check captchaKey and image exist in data
 	var data map[string]interface{}
@@ -105,8 +105,8 @@ func TestLogin(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("POST /api/privilege/auth/login: code=%d msg=%s", r.Code, r.Message)
+	if r.Code != "100" {
+		t.Fatalf("POST /api/privilege/auth/login: code=%s msg=%s", r.Code, r.Message)
 	}
 	var lr loginResp
 	json.Unmarshal(r.Data, &lr)
@@ -125,10 +125,10 @@ func TestLoginWrongPassword(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code == 100 {
+	if r.Code == "100" {
 		t.Fatal("wrong password should be rejected")
 	}
-	t.Logf("✅ wrong password rejected (code=%d)", r.Code)
+	t.Logf("✅ wrong password rejected (code=%s)", r.Code)
 }
 
 func TestLoginMissingFields(t *testing.T) {
@@ -139,8 +139,8 @@ func TestLoginMissingFields(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 1001 {
-		t.Fatalf("missing fields should return 1001, got %d", r.Code)
+	if r.Code != "1001" {
+		t.Fatalf("missing fields should return 1001, got %s", r.Code)
 	}
 	t.Log("✅ missing fields → 1001")
 }
@@ -155,8 +155,8 @@ func TestGetLoginUserInfo(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/privilege/auth/getLoginUserInfo")
 }
@@ -169,8 +169,8 @@ func TestMenus(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/privilege/auth/menus")
 }
@@ -182,12 +182,12 @@ func TestUserPage(t *testing.T) {
 		t.Fatalf("request failed: %v", err)
 	}
 	var r struct {
-		Code  int   `json:"code"`
+		Code  string `json:"code"`
 		Total int64 `json:"total"`
 	}
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	if r.Total == 0 {
 		t.Fatal("user total should be > 0")
@@ -203,8 +203,8 @@ func TestUserByID(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/privilege/user/:id")
 }
@@ -217,8 +217,8 @@ func TestUserByUsername(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/privilege/user/username/:username")
 }
@@ -231,10 +231,10 @@ func TestUserNotFound(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code == 100 {
+	if r.Code == "100" {
 		t.Fatal("non-existent user should return error")
 	}
-	t.Logf("✅ non-existent user → error (code=%d)", r.Code)
+	t.Logf("✅ non-existent user → error (code=%s)", r.Code)
 }
 
 func TestRolePage(t *testing.T) {
@@ -246,8 +246,8 @@ func TestRolePage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ POST /api/privilege/role/page")
 }
@@ -260,8 +260,8 @@ func TestDeptTree(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/privilege/department/tree")
 }
@@ -275,8 +275,8 @@ func TestCompanyPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ POST /api/privilege/company/page")
 }
@@ -289,8 +289,8 @@ func TestDictPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/privilege/dictionary/page")
 }
@@ -303,8 +303,8 @@ func TestLoginLogPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/privilege/login-log/page")
 }
@@ -318,8 +318,8 @@ func TestPvaluePage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ POST /api/privilege/pvalue/page")
 }
@@ -331,8 +331,8 @@ func TestNoTokenRejected(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 401 {
-		t.Fatalf("expected 401 without token, got %d", r.Code)
+	if r.Code != "401" {
+		t.Fatalf("expected 401 without token, got %s", r.Code)
 	}
 	t.Log("✅ no token → 401")
 }
@@ -347,8 +347,8 @@ func TestPlatformLogin(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d msg=%s", r.Code, r.Message)
+	if r.Code != "100" {
+		t.Fatalf("code=%s msg=%s", r.Code, r.Message)
 	}
 	var pr platformLoginResp
 	json.Unmarshal(r.Data, &pr)
@@ -367,10 +367,10 @@ func TestPlatformLoginWrong(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code == 100 {
+	if r.Code == "100" {
 		t.Fatal("wrong password should be rejected")
 	}
-	t.Logf("✅ platform wrong password rejected (code=%d)", r.Code)
+	t.Logf("✅ platform wrong password rejected (code=%s)", r.Code)
 }
 
 // ── platform endpoints ──
@@ -383,8 +383,8 @@ func TestPlatformTenantPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /platform/tenant-info/page")
 }
@@ -397,8 +397,8 @@ func TestPlatformAccountPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /platform/account-info/page")
 }
@@ -411,8 +411,8 @@ func TestPlatformGroupPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /platform/group-info/page")
 }
@@ -425,8 +425,8 @@ func TestPlatformInfoPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /platform/platform-info/page")
 }
@@ -441,8 +441,8 @@ func TestAgentPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/agent/page")
 }
@@ -455,8 +455,8 @@ func TestAgentCategoryTree(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/agent-category/tree")
 }
@@ -469,8 +469,8 @@ func TestDatasourceTypes(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/datasource/types")
 }
@@ -483,8 +483,8 @@ func TestModelConfigList(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/model-config/list")
 }
@@ -497,8 +497,8 @@ func TestPromptConfigList(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/prompt-config/list")
 }
@@ -511,8 +511,8 @@ func TestSemanticModelList(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/semantic-model/")
 }
@@ -525,8 +525,8 @@ func TestBusinessKnowledgeList(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/business-knowledge/")
 }
@@ -539,8 +539,8 @@ func TestAgentKnowledgePage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/agent-knowledge/page")
 }
@@ -555,8 +555,8 @@ func TestRagFilePage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/rag/file/page")
 }
@@ -569,8 +569,8 @@ func TestRagCategoryPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/rag/category/page")
 }
@@ -585,8 +585,8 @@ func TestKGEntityPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/kg/entity/page")
 }
@@ -599,8 +599,8 @@ func TestKGDomainPage(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(body, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d", r.Code)
+	if r.Code != "100" {
+		t.Fatalf("code=%s", r.Code)
 	}
 	t.Log("✅ GET /api/kg/domain/page")
 }
@@ -622,8 +622,8 @@ func TestCreateRole(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d msg=%s", r.Code, r.Message)
+	if r.Code != "100" {
+		t.Fatalf("code=%s msg=%s", r.Code, r.Message)
 	}
 	t.Log("✅ POST /api/privilege/role (create)")
 }
@@ -638,8 +638,8 @@ func TestCreateCompany(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d msg=%s", r.Code, r.Message)
+	if r.Code != "100" {
+		t.Fatalf("code=%s msg=%s", r.Code, r.Message)
 	}
 	t.Log("✅ POST /api/privilege/company (create)")
 }
@@ -654,8 +654,8 @@ func TestCreateDepartment(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d msg=%s", r.Code, r.Message)
+	if r.Code != "100" {
+		t.Fatalf("code=%s msg=%s", r.Code, r.Message)
 	}
 	t.Log("✅ POST /api/privilege/department (create)")
 }
@@ -670,8 +670,8 @@ func TestCreateDictionary(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d msg=%s", r.Code, r.Message)
+	if r.Code != "100" {
+		t.Fatalf("code=%s msg=%s", r.Code, r.Message)
 	}
 	t.Log("✅ POST /api/privilege/dictionary (create)")
 }
@@ -686,8 +686,8 @@ func TestCreateUser(t *testing.T) {
 	}
 	var r apiResp
 	json.Unmarshal(respBody, &r)
-	if r.Code != 100 {
-		t.Fatalf("code=%d msg=%s", r.Code, r.Message)
+	if r.Code != "100" {
+		t.Fatalf("code=%s msg=%s", r.Code, r.Message)
 	}
 	t.Log("✅ POST /api/privilege/user (create)")
 }

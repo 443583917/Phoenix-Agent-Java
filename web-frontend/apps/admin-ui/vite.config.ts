@@ -26,8 +26,7 @@ export default defineConfig(async () => {
         proxy: {
           '/api': {
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api/, ''),
-            // mock代理目标地址
+            // Go 后端路由自带 /api 前缀，不需要 rewrite
             target: targetUrl,
             ws: true,
           },

@@ -337,6 +337,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		}
 
 		// ---- AgentPresetQuestion batch + account filter ----
+			dataAPI.GET("/agent/:id/preset-questions", pqHandler.List)
 		dataAPI.GET("/agent/:id/:accountId/preset-questions", pqHandler.ListByAccount)
 		dataAPI.POST("/agent/:id/preset-questions", pqHandler.BatchSave)
 		// ---- Chat - Session & Message Management ----
@@ -673,8 +674,9 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 	// 404
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(http.StatusNotFound, response.Response{
-			Code:    404,
+			Code:    "404",
 			Message: "not found",
+			Success: false,
 		})
 	})
 

@@ -92,15 +92,90 @@ func (h *AuthHandler) Menus(c *gin.Context) {
 		response.ErrorWithMsg(c, errcode.ErrCode{Code: 500}, "service not available")
 		return
 	}
-	userID, _ := c.Get("user_id")
-	userIDStr := strconv.FormatUint(userID.(uint64), 10)
 
-	menus, err := h.svc.GetUserMenus(c.Request.Context(), userIDStr)
+	// 前端 getPrivilegeMenusApi 期望 { menus, pvalues }，且菜单字段为 sn/image/pvalues
+	tree, err := h.svc.GetModuleTree(c.Request.Context())
 	if err != nil {
 		response.Error(c, errcode.InternalError)
 		return
 	}
-	response.Success(c, menus)
+	pvalues, _, err := h.svc.PagePvalues(c.Request.Context(), model.PrivilegePvalueQuery{Page: 1, Size: 100})
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+
+	response.Success(c, model.FrontMenuData{
+		Menus:   toFrontMenus(tree),
+		Pvalues: toFrontPvalues(pvalues),
+	})
+}
+
+func toFrontMenus(nodes []*model.ModuleTreeVO) []model.FrontMenuVO {
+	out := make([]model.FrontMenuVO, 0, len(nodes))
+	for _, n := range nodes {
+		if n == nil {
+			continue
+		}
+		item := model.FrontMenuVO{
+			ID:        n.ID,
+			SN:        n.Code,
+			Name:      n.Name,
+			URL:       n.URL,
+			Component: n.Component,
+			Image:     n.Icon,
+			IsShow:    n.IsShow,
+			OrderNo:   n.OrderNo,
+			Type:      n.Type,
+			Pvalues:   []model.FrontPvalueVO{},
+		}
+		if n.PID != nil {
+			item.PID = *n.PID
+		}
+		for _, c := range n.Children {
+			item.Children = append(item.Children, toFrontMenu(c))
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func toFrontMenu(m model.ModuleTreeVO) model.FrontMenuVO {
+	item := model.FrontMenuVO{
+		ID:        m.ID,
+		SN:        m.Code,
+		Name:      m.Name,
+		URL:       m.URL,
+		Component: m.Component,
+		Image:     m.Icon,
+		IsShow:    m.IsShow,
+		OrderNo:   m.OrderNo,
+		Type:      m.Type,
+		Pvalues:   []model.FrontPvalueVO{},
+	}
+	if m.PID != nil {
+		item.PID = *m.PID
+	}
+	for _, c := range m.Children {
+		item.Children = append(item.Children, toFrontMenu(c))
+	}
+	return item
+}
+
+func toFrontPvalues(list []*model.PrivilegePvalue) []model.FrontPvalueVO {
+	out := make([]model.FrontPvalueVO, 0, len(list))
+	for _, p := range list {
+		if p == nil {
+			continue
+		}
+		out = append(out, model.FrontPvalueVO{
+			ID:       p.ID,
+			Name:     p.Name,
+			Position: p.Position,
+			OrderNo:  p.OrderNo,
+		})
+	}
+	return out
 }
 
 func (h *AuthHandler) GetLoginUserInfo(c *gin.Context) {

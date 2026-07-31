@@ -297,7 +297,7 @@ export default defineComponent({
         try {
           const token = localStorage.getItem('phoenix-token');
           const response = await fetch(
-            `/api/api/agent/${currentAgentId}/sessions/stream`,
+            `/api/agent/${currentAgentId}/sessions/stream`,
             {
               headers: {
                 'phoenix-token': token || '',

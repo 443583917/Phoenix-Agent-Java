@@ -65,7 +65,7 @@ export function streamChat(
   onError?: (error: Error) => Promise<void>,
   onComplete?: () => Promise<void>,
 ): () => void {
-  const url = `${API_BASE_URL}/api/admin/agent/chat`;
+  const url = `${API_BASE_URL}/admin/agent/chat`;
   const controller = new AbortController();
 
   const doFetch = async () => {
@@ -179,7 +179,7 @@ export function streamSearch(
     params.append('humanFeedbackContent', request.humanFeedbackContent);
   }
 
-  const url = `${API_BASE_URL}/api/admin/agent/stream/chatsql?${params.toString()}`;
+  const url = `${API_BASE_URL}/admin/agent/stream/chatsql?${params.toString()}`;
   const controller = new AbortController();
   let isCompleted = false;
 
@@ -270,7 +270,7 @@ export function streamHarnessChat(
   onError?: (error: Error) => Promise<void>,
   onComplete?: () => Promise<void>,
 ): () => void {
-  const url = `${API_BASE_URL}/api/admin/harness/chat`;
+  const url = `${API_BASE_URL}/admin/harness/chat`;
   const controller = new AbortController();
 
   const doFetch = async () => {
@@ -367,7 +367,7 @@ export async function confirmHarnessChat(
 ): Promise<void> {
   const token = localStorage.getItem('phoenix-token');
   console.log('[confirmHarnessChat] sending request', request);
-  const httpResponse = await fetch(`${API_BASE_URL}/api/admin/harness/confirm`, {
+  const httpResponse = await fetch(`${API_BASE_URL}/admin/harness/confirm`, {
     method: 'POST',
     headers: {
       'phoenix-token': token || '',

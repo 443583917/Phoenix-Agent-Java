@@ -76,6 +76,36 @@ type ModuleTreeVO struct {
 	Children []ModuleTreeVO `json:"children,omitempty"`
 }
 
+// FrontPvalueVO — 前端 access.ts 期望的权限值结构
+type FrontPvalueVO struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Position int    `json:"position"`
+	OrderNo  int    `json:"orderNo"`
+}
+
+// FrontMenuVO — 前端 access.ts 期望的菜单节点结构（sn/image/pvalues 字段名与前端一致）
+type FrontMenuVO struct {
+	ID        string          `json:"id"`
+	SN        string          `json:"sn"`
+	Name      string          `json:"name"`
+	URL       string          `json:"url"`
+	Component string          `json:"component"`
+	Image     string          `json:"image"`
+	IsShow    int             `json:"isShow"`
+	OrderNo   int             `json:"orderNo"`
+	PID       string          `json:"pid"`
+	Type      string          `json:"type"`
+	Pvalues   []FrontPvalueVO `json:"pvalues"`
+	Children  []FrontMenuVO   `json:"children,omitempty"`
+}
+
+// FrontMenuData — GET /api/privilege/auth/menus 响应：菜单树 + 权限值
+type FrontMenuData struct {
+	Menus   []FrontMenuVO   `json:"menus"`
+	Pvalues []FrontPvalueVO `json:"pvalues"`
+}
+
 // OrganizationTreeVO — 组织树节点（公司/部门）
 type OrganizationTreeVO struct {
 	ID       string               `json:"id"`

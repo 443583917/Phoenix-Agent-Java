@@ -2,7 +2,9 @@ package knowledge
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -184,19 +186,31 @@ func (h *AgentKnowledgeHandler) RetryEmbedding(c *gin.Context) {
 // QueryPage returns a paginated list using POST body for complex filter conditions.
 // POST /api/agent-knowledge/query/page
 func (h *AgentKnowledgeHandler) QueryPage(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	size, _ := strconv.Atoi(c.DefaultQuery("size", "10"))
-
-	var query model.AgentKnowledge
-	if err := c.ShouldBindJSON(&query); err != nil {
-		response.Error(c, errcode.InvalidParams)
-		return
+	var req struct {
+		PageNum  int    `json:"pageNum"`
+		PageSize int    `json:"pageSize"`
+		AgentId  string `json:"agentId"`
+		Title    string `json:"title"`
+		Type     string `json:"type"`
+		IsRecall *int   `json:"isRecall"`
 	}
-
-	list, total, err := h.svc.PageAgentKnowledge(c.Request.Context(), page, size, &query)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		if !errors.Is(err, io.EOF) {
+			response.Error(c, errcode.InvalidParams)
+			return
+		}
+	}
+	if req.PageNum <= 0 { req.PageNum = 1 }
+	if req.PageSize <= 0 || req.PageSize > 9999 { req.PageSize = 10 }
+	query := model.AgentKnowledge{Title: req.Title, Type: req.Type}
+	if req.AgentId != "" {
+		if id, err := strconv.Atoi(req.AgentId); err == nil { query.AgentId = id }
+	}
+	if req.IsRecall != nil { query.IsRecall = *req.IsRecall }
+	list, total, err := h.svc.PageAgentKnowledge(c.Request.Context(), req.PageNum, req.PageSize, &query)
 	if err != nil {
 		response.Error(c, errcode.InternalError)
 		return
 	}
-	response.SuccessPage(c, list, total, page, size)
+	response.SuccessPage(c, list, total, req.PageNum, req.PageSize)
 }

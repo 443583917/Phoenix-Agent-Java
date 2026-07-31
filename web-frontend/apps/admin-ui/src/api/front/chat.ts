@@ -135,7 +135,7 @@ export function streamFrontChat(
   onError?: (error: Error) => Promise<void>,
   onComplete?: () => Promise<void>,
 ): () => void {
-  const url = `${API_BASE_URL}/api/front/stream/chat`;
+  const url = `${API_BASE_URL}/front/stream/chat`;
   const controller = new AbortController();
 
   const doFetch = async () => {
@@ -242,7 +242,7 @@ export function streamFrontHarnessChat(
   onError?: (error: Error) => Promise<void>,
   onComplete?: () => Promise<void>,
 ): () => void {
-  const url = `${API_BASE_URL}/api/front/harness/chat`;
+  const url = `${API_BASE_URL}/front/harness/chat`;
   const controller = new AbortController();
 
   const doFetch = async () => {
@@ -336,7 +336,7 @@ export async function confirmFrontHarnessChat(
   onMessage?: (response: GraphNodeResponse) => Promise<void>,
   onComplete?: () => Promise<void>,
 ): Promise<void> {
-  const httpResponse = await fetch(`${API_BASE_URL}/api/front/harness/confirm`, {
+  const httpResponse = await fetch(`${API_BASE_URL}/front/harness/confirm`, {
     method: 'POST',
     headers: {
       'phoenix-token': getAuthToken(),
@@ -419,7 +419,7 @@ export function streamFrontChatSql(
     params.append('humanFeedbackContent', request.humanFeedbackContent);
   }
 
-  const url = `${API_BASE_URL}/api/front/stream/chatsql?${params.toString()}`;
+  const url = `${API_BASE_URL}/front/stream/chatsql?${params.toString()}`;
   const controller = new AbortController();
   let isCompleted = false;
 

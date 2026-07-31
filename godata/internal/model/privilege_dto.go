@@ -2,9 +2,10 @@ package model
 
 // LoginInfoDTO — POST /api/privilege/auth/login
 type LoginInfoDTO struct {
-	Type        string `json:"type" binding:"required"`
+	Type        string `json:"type"`
 	Username    string `json:"username" binding:"required"`
 	Password    string `json:"password" binding:"required"`
+	RoleType    string `json:"roleType"`
 	CaptchaKey  string `json:"captchaKey"`
 	CaptchaCode string `json:"captchaCode"`
 }
