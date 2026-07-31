@@ -163,12 +163,15 @@ func main() {
 
 	var llmModel tmodel.Model
 	if cfg.Agent.Model.APIKey != "" {
+		keySet := cfg.Agent.Model.APIKey[:8] + "..."
 		llmModel = openai.New(
 			cfg.Agent.Model.Model,
 			openai.WithBaseURL(cfg.Agent.Model.BaseURL),
 			openai.WithAPIKey(cfg.Agent.Model.APIKey),
 		)
-		zap.L().Info("LLM model initialized", zap.String("model", cfg.Agent.Model.Model))
+		zap.L().Info("LLM model initialized",
+			zap.String("model", cfg.Agent.Model.Model),
+			zap.String("apiKey", keySet))
 	}
 
 	dbManager := datasource.NewDatasourceManager()

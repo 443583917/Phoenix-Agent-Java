@@ -449,6 +449,28 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		{
 			uploadGroup.POST("/avatar", uploadHandler.UploadAvatar)
 		}
+
+		// ---- 前端兼容别名路由（无 /api 前缀） ----
+		// 前端请求经 Vite 开发代理 rewrite 后 /api 前缀被剥除，
+		// 以下接口需以无前缀形式暴露，以兼容前端现有请求路径。
+		compat := r.Group("/")
+		compat.Use(middleware.Auth(jwtManager))
+		compat.Use(middleware.RBAC(enforcer))
+		{
+			compat.POST("/upload/avatar", uploadHandler.UploadAvatar)
+			compat.GET("/semantic-model/template/download", smHandler.DownloadTemplate)
+
+			dsCompat := compat.Group("/datasource")
+			{
+				dsCompat.GET("/:id/logical-relations", dsDataHandler.ListLogicalRelations)
+				dsCompat.POST("/:id/logical-relations", dsDataHandler.CreateLogicalRelation)
+				dsCompat.PUT("/:id/logical-relations", dsDataHandler.UpdateLogicalRelation)
+				dsCompat.PUT("/:id/logical-relations/:relationId", dsDataHandler.UpdateSingleLogicalRelation)
+				dsCompat.DELETE("/:id/logical-relations", dsDataHandler.DeleteLogicalRelation)
+				dsCompat.DELETE("/:id/logical-relations/:relationId", dsDataHandler.DeleteSingleLogicalRelation)
+				dsCompat.GET("/:id/tables/:tableName/columns", dsDataHandler.GetColumns)
+			}
+		}
 	}
 
 	// 平台认证路由（仅 updatePassword 需要 JWT）

@@ -6,7 +6,7 @@ type ErrCode struct {
 }
 
 var (
-	Success       = ErrCode{0, "success"}
+	Success       = ErrCode{100, "success"}
 	Unauthorized  = ErrCode{401, "未认证"}
 	Forbidden     = ErrCode{403, "无权限"}
 	NotFound      = ErrCode{404, "资源不存在"}

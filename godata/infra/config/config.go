@@ -69,12 +69,20 @@ func Load(serviceName string) (*AppConfig, error) {
 	}
 
 	// 展开 ${VAR} 环境变量
+	// 注意：不能用 v.Set("a.b.c", val) 写扁平 key，那样会在 override 中创建
+	// 不完整的嵌套结构，导致后续 UnmarshalKey("a") 时覆盖掉 yaml 中的其他字段。
+	// 改为按顶层 key 取出完整嵌套结构、递归展开后再整体 Set。
+	seen := map[string]bool{}
 	for _, key := range v.AllKeys() {
-		val := v.GetString(key)
-		if strings.HasPrefix(val, "${") && strings.HasSuffix(val, "}") {
-			envVar := val[2 : len(val)-1]
-			v.Set(key, os.Getenv(envVar))
+		top := key
+		if idx := strings.Index(key, "."); idx > 0 {
+			top = key[:idx]
 		}
+		if seen[top] {
+			continue
+		}
+		seen[top] = true
+		v.Set(top, expandEnvVars(v.Get(top)))
 	}
 
 	cfg := &AppConfig{}
@@ -124,4 +132,31 @@ func loadConfigFile(v *viper.Viper, name string) error {
 		// 配置文件不存在可接受
 	}
 	return nil
+}
+
+// expandEnvVars 递归展开配置值中的 ${VAR} 环境变量占位符。
+func expandEnvVars(val interface{}) interface{} {
+	switch t := val.(type) {
+	case string:
+		if strings.HasPrefix(t, "${") && strings.HasSuffix(t, "}") {
+			if vv, ok := os.LookupEnv(t[2 : len(t)-1]); ok {
+				return vv
+			}
+		}
+		return t
+	case map[string]interface{}:
+		m := make(map[string]interface{}, len(t))
+		for k, v := range t {
+			m[k] = expandEnvVars(v)
+		}
+		return m
+	case []interface{}:
+		s := make([]interface{}, len(t))
+		for i, v := range t {
+			s[i] = expandEnvVars(v)
+		}
+		return s
+	default:
+		return val
+	}
 }

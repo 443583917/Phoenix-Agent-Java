@@ -4,6 +4,7 @@ import (
 	"context"
 
 	nl2sqltypes "github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
+	"go.uber.org/zap"
 	"trpc.group/trpc-go/trpc-agent-go/graph"
 )
 
@@ -36,6 +37,7 @@ func (n *IntentRecognitionNode) Execute(ctx context.Context, state graph.State) 
 
 	var output nl2sqltypes.IntentRecognitionOutput
 	if err := n.LLM.CallJSON(ctx, prompt, data, &output); err != nil {
+		zap.L().Warn("intent recognition LLM call failed", zap.Error(err))
 		// Default to data analysis on error
 		output = nl2sqltypes.IntentRecognitionOutput{
 			Classification: "可能的数据分析请求",

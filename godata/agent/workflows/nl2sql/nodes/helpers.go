@@ -82,7 +82,9 @@ func (s *LLMService) Call(ctx context.Context, systemPrompt, userPrompt string) 
 			return "", fmt.Errorf("LLM response error: %s", resp.Error.Message)
 		}
 		for _, choice := range resp.Choices {
+			// 流式响应内容在 Delta，非流式响应内容在 Message，两者都读取
 			fullContent.WriteString(choice.Delta.Content)
+			fullContent.WriteString(choice.Message.Content)
 		}
 	}
 
