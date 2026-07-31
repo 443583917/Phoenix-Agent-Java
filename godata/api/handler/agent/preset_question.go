@@ -26,7 +26,7 @@ func NewAgentPresetQuestionHandler(svc *service.DataService) *AgentPresetQuestio
 func (h *AgentPresetQuestionHandler) Page(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "10"))
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)
@@ -63,7 +63,7 @@ func (h *AgentPresetQuestionHandler) GetByID(c *gin.Context) {
 // Create creates a new preset question for an agent.
 // POST /api/agent/:agentId/preset-question
 func (h *AgentPresetQuestionHandler) Create(c *gin.Context) {
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)
@@ -125,7 +125,7 @@ func (h *AgentPresetQuestionHandler) Delete(c *gin.Context) {
 // List returns all preset questions for an agent (non-paginated).
 // GET /api/agent/:agentId/preset-question
 func (h *AgentPresetQuestionHandler) List(c *gin.Context) {
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)
@@ -147,7 +147,7 @@ func (h *AgentPresetQuestionHandler) List(c *gin.Context) {
 // ListByAccount returns preset questions filtered by account ID.
 // GET /api/agent/:agentId/:accountId/preset-questions
 func (h *AgentPresetQuestionHandler) ListByAccount(c *gin.Context) {
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)
@@ -169,7 +169,7 @@ func (h *AgentPresetQuestionHandler) ListByAccount(c *gin.Context) {
 // BatchSave creates or updates multiple preset questions in one call.
 // POST /api/agent/:agentId/preset-questions
 func (h *AgentPresetQuestionHandler) BatchSave(c *gin.Context) {
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)

@@ -32,7 +32,7 @@ func (n *GraphMergeNode) Execute(ctx context.Context, state graph.State) (any, e
 			entityIDMap[e.Name] = entityID
 
 			entity := &model.KGEntity{
-				BaseModel:   model.BaseModel{ID: entityID},
+				ID: entityID,
 				Name:        e.Name,
 				Type:        e.Type,
 				Description: e.Description,
@@ -55,7 +55,7 @@ func (n *GraphMergeNode) Execute(ctx context.Context, state graph.State) (any, e
 			}
 
 			relation := &model.KGRelation{
-				BaseModel:      model.BaseModel{ID: strconv.FormatUint(id.MustGenerateID(), 10)},
+				ID: strconv.FormatUint(id.MustGenerateID(), 10),
 				SourceEntityId: sourceID,
 				TargetEntityId: targetID,
 				RelationType:   r.RelationType,

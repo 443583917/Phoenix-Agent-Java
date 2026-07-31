@@ -20,7 +20,7 @@ func NewSessionEventHandler(svc *service.DataService) *SessionEventHandler {
 }
 
 func (h *SessionEventHandler) StreamSessions(c *gin.Context) {
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, _ := strconv.Atoi(agentIDStr)
 	userID := getUserID(c)
 

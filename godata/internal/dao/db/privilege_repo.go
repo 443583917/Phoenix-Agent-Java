@@ -226,25 +226,25 @@ func (r *moduleRepo) FindByID(ctx context.Context, id string) (*model.PrivilegeM
 
 func (r *moduleRepo) FindByPID(ctx context.Context, pid string) ([]*model.PrivilegeModule, error) {
 	var list []*model.PrivilegeModule
-	err := r.db.WithContext(ctx).Where("pid = ? AND del_flag = 0", pid).Order("sort ASC").Find(&list).Error
+	err := r.db.WithContext(ctx).Where("pid = ? AND del_flag = 0", pid).Order("order_no ASC").Find(&list).Error
 	return list, err
 }
 
 func (r *moduleRepo) FindBySystemID(ctx context.Context, systemID string) ([]*model.PrivilegeModule, error) {
 	var list []*model.PrivilegeModule
-	err := r.db.WithContext(ctx).Where("system_id = ? AND del_flag = 0", systemID).Order("sort ASC").Find(&list).Error
+	err := r.db.WithContext(ctx).Where("system_id = ? AND del_flag = 0", systemID).Order("order_no ASC").Find(&list).Error
 	return list, err
 }
 
 func (r *moduleRepo) FindAll(ctx context.Context) ([]*model.PrivilegeModule, error) {
 	var list []*model.PrivilegeModule
-	err := r.db.WithContext(ctx).Where("del_flag = 0").Order("sort ASC").Find(&list).Error
+	err := r.db.WithContext(ctx).Where("del_flag = 0").Order("order_no ASC").Find(&list).Error
 	return list, err
 }
 
 func (r *moduleRepo) Tree(ctx context.Context) ([]*model.ModuleTreeVO, error) {
 	var modules []*model.PrivilegeModule
-	if err := r.db.WithContext(ctx).Where("del_flag = 0").Order("sort ASC").Find(&modules).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("del_flag = 0").Order("order_no ASC").Find(&modules).Error; err != nil {
 		return nil, err
 	}
 	treeVOs := buildModuleTree(modules, nil)
@@ -296,7 +296,7 @@ func (r *aclRepo) FindByID(ctx context.Context, id string) (*model.PrivilegeAcl,
 
 func (r *aclRepo) FindByRoleID(ctx context.Context, roleID string) ([]*model.PrivilegeAcl, error) {
 	var list []*model.PrivilegeAcl
-	err := r.db.WithContext(ctx).Where("role_id = ? AND del_flag = 0", roleID).Find(&list).Error
+	err := r.db.WithContext(ctx).Where("release_id = ? AND del_flag = 0", roleID).Find(&list).Error
 	return list, err
 }
 
@@ -309,13 +309,13 @@ func (r *aclRepo) FindAll(ctx context.Context) ([]*model.PrivilegeAcl, error) {
 func (r *aclRepo) SaveAll(ctx context.Context, acls []*model.PrivilegeAcl) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(acls) > 0 {
-			roleID := acls[0].RoleID
-			if err := tx.Model(&model.PrivilegeAcl{}).Where("role_id = ? AND del_flag = 0", roleID).Update("del_flag", 1).Error; err != nil {
+			roleID := acls[0].ReleaseID
+			if err := tx.Model(&model.PrivilegeAcl{}).Where("release_id = ? AND del_flag = 0", roleID).Update("del_flag", 1).Error; err != nil {
 				return err
 			}
 		}
 		for _, acl := range acls {
-			if acl.RoleID == "" || acl.ModuleID == "" {
+			if acl.ReleaseID == "" || acl.ModuleID == "" {
 				continue
 			}
 			if err := tx.Create(acl).Error; err != nil {
@@ -363,13 +363,13 @@ func (r *deptRepo) FindByID(ctx context.Context, id string) (*model.PrivilegeDep
 
 func (r *deptRepo) FindByPID(ctx context.Context, pid string) ([]*model.PrivilegeDepartment, error) {
 	var list []*model.PrivilegeDepartment
-	err := r.db.WithContext(ctx).Where("pid = ? AND del_flag = 0", pid).Order("sort ASC").Find(&list).Error
+	err := r.db.WithContext(ctx).Where("pid = ? AND del_flag = 0", pid).Order("order_no ASC").Find(&list).Error
 	return list, err
 }
 
 func (r *deptRepo) FindByCompanyID(ctx context.Context, companyID string) ([]*model.PrivilegeDepartment, error) {
 	var list []*model.PrivilegeDepartment
-	err := r.db.WithContext(ctx).Where("company_id = ? AND del_flag = 0", companyID).Order("sort ASC").Find(&list).Error
+	err := r.db.WithContext(ctx).Where("company_id = ? AND del_flag = 0", companyID).Order("order_no ASC").Find(&list).Error
 	return list, err
 }
 
@@ -389,7 +389,7 @@ func (r *deptRepo) OrgTree(ctx context.Context) ([]*model.OrganizationTreeVO, er
 	}
 
 	var departments []*model.PrivilegeDepartment
-	if err := r.db.WithContext(ctx).Where("del_flag = 0").Order("sort ASC").Find(&departments).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("del_flag = 0").Order("order_no ASC").Find(&departments).Error; err != nil {
 		return nil, err
 	}
 
@@ -621,13 +621,13 @@ func (r *dictionaryRepo) FindByID(ctx context.Context, id string) (*model.Privil
 
 func (r *dictionaryRepo) FindBySystemSN(ctx context.Context, systemSN string) ([]*model.PrivilegeDictionary, error) {
 	var list []*model.PrivilegeDictionary
-	err := r.db.WithContext(ctx).Where("system_sn = ? AND del_flag = 0", systemSN).Order("sort ASC").Find(&list).Error
+	err := r.db.WithContext(ctx).Where("system_sn = ? AND del_flag = 0", systemSN).Order("order_no ASC").Find(&list).Error
 	return list, err
 }
 
 func (r *dictionaryRepo) FindByPCode(ctx context.Context, pcode string) ([]*model.PrivilegeDictionary, error) {
 	var list []*model.PrivilegeDictionary
-	err := r.db.WithContext(ctx).Where("pcode = ? AND del_flag = 0", pcode).Order("sort ASC").Find(&list).Error
+	err := r.db.WithContext(ctx).Where("pcode = ? AND del_flag = 0", pcode).Order("order_no ASC").Find(&list).Error
 	return list, err
 }
 
@@ -769,7 +769,7 @@ func (r *loginLogRepo) Page(ctx context.Context, page, size int) ([]*model.Privi
 		size = 20
 	}
 	offset := (page - 1) * size
-	if err := dbQuery.Offset(offset).Limit(size).Order("login_time DESC").Find(&list).Error; err != nil {
+	if err := dbQuery.Offset(offset).Limit(size).Order("operation_time DESC").Find(&list).Error; err != nil {
 		return nil, 0, err
 	}
 	return list, total, nil

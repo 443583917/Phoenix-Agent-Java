@@ -31,9 +31,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ../sql/all_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ../sql/all_data.sql:/docker-entrypoint-initdb.d/02_data.sql
+      - pgdata_new:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U phoenix"]
       interval: 5s
@@ -113,6 +111,8 @@ services:
 
 volumes:
   pgdata:
+  pgdata_new:
+    external: true
 
 networks:
   phoenix-net:

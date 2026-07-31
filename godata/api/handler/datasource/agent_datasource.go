@@ -26,7 +26,7 @@ func NewAgentDatasourceHandler(svc *service.DataService) *AgentDatasourceHandler
 func (h *AgentDatasourceHandler) Page(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "10"))
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)
@@ -63,7 +63,7 @@ func (h *AgentDatasourceHandler) GetByID(c *gin.Context) {
 // Create creates a new datasource-agent link.
 // POST /api/agent/:agentId/datasource
 func (h *AgentDatasourceHandler) Create(c *gin.Context) {
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)
@@ -182,7 +182,7 @@ func (h *AgentDatasourceHandler) SaveTables(c *gin.Context) {
 // List returns all datasource links for an agent (non-paginated).
 // GET /api/agent/:agentId/datasources
 func (h *AgentDatasourceHandler) List(c *gin.Context) {
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)
@@ -202,7 +202,7 @@ func (h *AgentDatasourceHandler) List(c *gin.Context) {
 // GetActive returns the first active datasource link for an agent.
 // GET /api/agent/:agentId/datasources/active
 func (h *AgentDatasourceHandler) GetActive(c *gin.Context) {
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)
@@ -227,7 +227,7 @@ func (h *AgentDatasourceHandler) GetActive(c *gin.Context) {
 // InitSchema initializes the schema for all datasources linked to an agent.
 // POST /api/agent/:agentId/datasources/init
 func (h *AgentDatasourceHandler) InitSchema(c *gin.Context) {
-	agentIDStr := c.Param("agentId")
+	agentIDStr := c.Param("id")
 	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)

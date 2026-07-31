@@ -116,10 +116,10 @@ func (u *PrivilegeUsecase) Login(ctx context.Context, dto model.LoginInfoDTO, ip
 
 	// 4. Save login log.
 	_ = u.loginLogRepo.Create(ctx, &model.PrivilegeLoginLog{
-		UserID:    user.ID,
-		Username:  user.Username,
-		LoginIP:   ip,
-		LoginTime: time.Now(),
+		ID: int64(id.MustGenerateID()), OperationID: 0,
+		OperationUsername: user.Username,
+		IP:        ip,
+		OperationTime: time.Now(),
 	})
 
 	// 5. Collect role names.
@@ -352,7 +352,7 @@ func (u *PrivilegeUsecase) GetUserByUsername(ctx context.Context, username strin
 // CreateRole creates a new privilege role.
 func (u *PrivilegeUsecase) CreateRole(ctx context.Context, dto model.PrivilegeRoleDTO) (*model.PrivilegeRole, error) {
 	role := &model.PrivilegeRole{
-		BaseModel:  model.BaseModel{ID: genID()},
+		BaseModel:  model.BaseModel{ID: genID(), CreateBy: func() *string { s := "system"; return &s }()},
 		Name:       dto.Name,
 		SN:         dto.SN,
 		RoleLevel:  dto.RoleLevel,
@@ -387,7 +387,7 @@ func (u *PrivilegeUsecase) UpdateRole(ctx context.Context, dto model.PrivilegeRo
 	existing.Note = dto.Note
 	existing.ValidState = dto.ValidState
 	existing.CompanyID = dto.CompanyID
-	existing.SystemID = dto.SystemID
+	
 
 	if err := u.roleRepo.Update(ctx, existing); err != nil {
 		return err
@@ -451,7 +451,7 @@ func (u *PrivilegeUsecase) GetRoleAcls(ctx context.Context, roleID string) ([]mo
 		result[i] = model.RoleAclVO{
 			ModuleID:   acl.ModuleID,
 			ModuleName: moduleName,
-			Permission: acl.Permission,
+			Permission: acl.AclState,
 			Checked:    true,
 		}
 	}
@@ -588,9 +588,9 @@ func (u *PrivilegeUsecase) CreateModule(ctx context.Context, dto model.Privilege
 		Code:      dto.Code,
 		URL:       dto.URL,
 		Icon:      dto.Icon,
-		Sort:      dto.Sort,
+		OrderNo:      dto.Sort,
 		SystemID:  dto.SystemID,
-		Type:      dto.Type,
+		Type:      strconv.Itoa(dto.Type),
 	}
 	if dto.PID != "" {
 		module.PID = &dto.PID
@@ -615,9 +615,9 @@ func (u *PrivilegeUsecase) UpdateModule(ctx context.Context, dto model.Privilege
 	existing.Code = dto.Code
 	existing.URL = dto.URL
 	existing.Icon = dto.Icon
-	existing.Sort = dto.Sort
-	existing.SystemID = dto.SystemID
-	existing.Type = dto.Type
+	existing.OrderNo = dto.Sort
+	
+	existing.Type = strconv.Itoa(dto.Type)
 	if dto.PID != "" {
 		existing.PID = &dto.PID
 	} else {
@@ -643,10 +643,9 @@ func (u *PrivilegeUsecase) SaveACLs(ctx context.Context, dtos []model.PrivilegeA
 	for _, d := range dtos {
 		acls = append(acls, &model.PrivilegeAcl{
 			BaseModel:  model.BaseModel{ID: genID()},
-			RoleID:     d.RoleID,
+			ReleaseID:     d.RoleID,
 			ModuleID:   d.ModuleID,
-			Permission: d.Permission,
-			ReleaseID:  d.ReleaseID,
+			AclState: d.Permission /* was Permission */,
 		})
 	}
 	return u.aclRepo.SaveAll(ctx, acls)
@@ -656,10 +655,9 @@ func (u *PrivilegeUsecase) SaveACLs(ctx context.Context, dtos []model.PrivilegeA
 func (u *PrivilegeUsecase) SaveModuleACL(ctx context.Context, dto model.PrivilegeAclDTO) error {
 	acl := &model.PrivilegeAcl{
 		BaseModel:  model.BaseModel{ID: genID()},
-		RoleID:     dto.RoleID,
+		ReleaseID:     dto.RoleID,
 		ModuleID:   dto.ModuleID,
-		Permission: dto.Permission,
-		ReleaseID:  dto.ReleaseID,
+		AclState: dto.Permission /* was Permission */,
 	}
 	return u.aclRepo.SaveModule(ctx, acl)
 }
@@ -730,9 +728,9 @@ func (u *PrivilegeUsecase) UpdateACL(ctx context.Context, dto model.PrivilegeAcl
 		return &AppError{Code: 409001, Msg: "ACL不存在"}
 	}
 
-	existing.RoleID = dto.RoleID
+	existing.ReleaseID = dto.RoleID
 	existing.ModuleID = dto.ModuleID
-	existing.Permission = dto.Permission
+	existing.AclState = dto.Permission
 	existing.ReleaseID = dto.ReleaseID
 
 	return u.aclRepo.Update(ctx, existing)
@@ -749,11 +747,10 @@ func (u *PrivilegeUsecase) SaveAllACLs(ctx context.Context, dtos []model.Privile
 	for _, d := range dtos {
 		acls = append(acls, &model.PrivilegeAcl{
 			BaseModel:   model.BaseModel{ID: genID()},
-			RoleID:      d.RoleID,
+			// ReleaseID: d.RoleID - duplicate, using d.ReleaseID below,
 			ModuleID:    d.ModuleID,
-			Permission:  d.Permission,
+			AclState:  d.Permission,
 			ReleaseID:   releaseID,
-			CheckStatus: checkStatus,
 		})
 	}
 	return u.aclRepo.SaveAll(ctx, acls)
@@ -798,11 +795,11 @@ func (u *PrivilegeUsecase) GetDepartmentByCode(ctx context.Context, code string)
 // CreateDepartment creates a new department.
 func (u *PrivilegeUsecase) CreateDepartment(ctx context.Context, dto model.PrivilegeDepartmentDTO) (*model.PrivilegeDepartment, error) {
 	dept := &model.PrivilegeDepartment{
-		BaseModel: model.BaseModel{ID: genID()},
+		BaseModel: model.BaseModel{ID: genID(), CreateBy: func() *string { s := "system"; return &s }()},
 		Name:      dto.Name,
 		Code:      dto.Code,
 		CompanyID: dto.CompanyID,
-		Sort:      dto.Sort,
+		OrderNo:      dto.Sort,
 	}
 	if dto.PID != "" {
 		dept.PID = &dto.PID
@@ -826,7 +823,7 @@ func (u *PrivilegeUsecase) UpdateDepartment(ctx context.Context, dto model.Privi
 	existing.Name = dto.Name
 	existing.Code = dto.Code
 	existing.CompanyID = dto.CompanyID
-	existing.Sort = dto.Sort
+	existing.OrderNo = dto.Sort
 	if dto.PID != "" {
 		existing.PID = &dto.PID
 	} else {
@@ -884,13 +881,13 @@ func (u *PrivilegeUsecase) GetCompanyByCode(ctx context.Context, code string) (*
 // CreateCompany creates a new company.
 func (u *PrivilegeUsecase) CreateCompany(ctx context.Context, dto model.PrivilegeCompanyDTO) (*model.PrivilegeCompany, error) {
 	company := &model.PrivilegeCompany{
-		BaseModel: model.BaseModel{ID: genID()},
+		BaseModel: model.BaseModel{ID: genID(), CreateBy: func() *string { s := "system"; return &s }()},
 		CName:     dto.CName,
 		EName:     dto.EName,
 		Code:      dto.Code,
-		SN:        dto.SN,
-		Manager:   dto.Manager,
-		Note:      dto.Note,
+		ShortName: dto.SN,
+		// Manager removed - no DB column
+		Descr:     dto.Note,
 	}
 	if err := u.companyRepo.Create(ctx, company); err != nil {
 		return nil, err
@@ -911,9 +908,9 @@ func (u *PrivilegeUsecase) UpdateCompany(ctx context.Context, dto model.Privileg
 	existing.CName = dto.CName
 	existing.EName = dto.EName
 	existing.Code = dto.Code
-	existing.SN = dto.SN
-	existing.Manager = dto.Manager
-	existing.Note = dto.Note
+	// existing.ShortName = dto.SN /* field was SN */
+	// existing.Manager removed - no DB column
+	existing.Descr = dto.Note
 	return u.companyRepo.Update(ctx, existing)
 }
 
@@ -933,8 +930,6 @@ func (u *PrivilegeUsecase) PageCompanies(ctx context.Context, query model.Privil
 func (u *PrivilegeUsecase) CreateEmployee(ctx context.Context, dto model.PrivilegeEmployeeDTO) (*model.PrivilegeEmployee, error) {
 	emp := &model.PrivilegeEmployee{
 		BaseModel: model.BaseModel{ID: genID()},
-		UserCode:  dto.UserCode,
-		EmpCode:   dto.EmpCode,
 		DeptID:    dto.DeptID,
 	}
 	if err := u.employeeRepo.Create(ctx, emp); err != nil {
@@ -953,7 +948,6 @@ func (u *PrivilegeUsecase) UpdateEmployee(ctx context.Context, dto model.Privile
 		return &AppError{Code: 405001, Msg: "员工不存在"}
 	}
 
-	existing.UserCode = dto.UserCode
 	existing.EmpCode = dto.EmpCode
 	existing.DeptID = dto.DeptID
 	return u.employeeRepo.Update(ctx, existing)
@@ -1006,12 +1000,12 @@ func (u *PrivilegeUsecase) GetEmployeeByEmpCode(ctx context.Context, empCode str
 // CreateDictionary creates a new dictionary entry.
 func (u *PrivilegeUsecase) CreateDictionary(ctx context.Context, dto model.PrivilegeDictionaryDTO) (*model.PrivilegeDictionary, error) {
 	dict := &model.PrivilegeDictionary{
-		BaseModel: model.BaseModel{ID: genID()},
+		ID: int64(id.MustGenerateID()),
 		Code:      dto.Code,
 		Name:      dto.Name,
 		SystemSN:  dto.SystemSN,
-		SystemID:  dto.SystemID,
-		Sort:      dto.Sort,
+		OrderNo:   dto.Sort,
+			CreatorBy: "system",
 	}
 	if dto.PCode != "" {
 		dict.PCode = &dto.PCode
@@ -1035,8 +1029,8 @@ func (u *PrivilegeUsecase) UpdateDictionary(ctx context.Context, dto model.Privi
 	existing.Code = dto.Code
 	existing.Name = dto.Name
 	existing.SystemSN = dto.SystemSN
-	existing.SystemID = dto.SystemID
-	existing.Sort = dto.Sort
+	
+	existing.OrderNo = dto.Sort
 	if dto.PCode != "" {
 		existing.PCode = &dto.PCode
 	} else {
@@ -1083,7 +1077,7 @@ func (u *PrivilegeUsecase) GetDictionariesByPCode(ctx context.Context, pcode str
 func (u *PrivilegeUsecase) CreatePvalue(ctx context.Context, dto model.PrivilegePvalueDTO) (*model.PrivilegePvalue, error) {
 	pv := &model.PrivilegePvalue{
 		BaseModel: model.BaseModel{ID: genID()},
-		Code:      dto.Code,
+		Position:  0 /* TODO: Code→Position mapping */,
 		Name:      dto.Name,
 		SystemID:  dto.SystemID,
 	}
@@ -1103,9 +1097,9 @@ func (u *PrivilegeUsecase) UpdatePvalue(ctx context.Context, dto model.Privilege
 		return &AppError{Code: 407001, Msg: "权限值不存在"}
 	}
 
-	existing.Code = dto.Code
+	existing.Position = 0 /* FIXME: Code→Position mapping */
 	existing.Name = dto.Name
-	existing.SystemID = dto.SystemID
+	
 	return u.pvalueRepo.Update(ctx, existing)
 }
 
@@ -1158,11 +1152,10 @@ func (u *PrivilegeUsecase) GetLoginLogByID(ctx context.Context, id string) (*mod
 // CreateLoginLog creates a new login log entry.
 func (u *PrivilegeUsecase) CreateLoginLog(ctx context.Context, dto model.PrivilegeLoginLogDTO) (*model.PrivilegeLoginLog, error) {
 	log := &model.PrivilegeLoginLog{
-		BaseModel: model.BaseModel{ID: genID()},
-		UserID:    dto.UserID,
-		Username:  dto.Username,
-		LoginIP:   dto.LoginIP,
-		LoginTime: time.Now(),
+		ID: int64(id.MustGenerateID()), OperationID: 0,
+		OperationUsername: dto.Username,
+		IP: dto.LoginIP,
+		OperationTime: time.Now(),
 	}
 	if err := u.loginLogRepo.Create(ctx, log); err != nil {
 		return nil, err
@@ -1216,7 +1209,7 @@ func (u *PrivilegeUsecase) SyncDepartments(ctx context.Context, dtos []model.Pri
 		if len(all) > 0 {
 			existing := all[0]
 			existing.Name = dto.Name
-			existing.Sort = dto.Sort
+			existing.OrderNo = dto.Sort
 			if dto.PID != "" {
 				existing.PID = &dto.PID
 			}
@@ -1229,7 +1222,7 @@ func (u *PrivilegeUsecase) SyncDepartments(ctx context.Context, dtos []model.Pri
 				Name:      dto.Name,
 				Code:      dto.Code,
 				CompanyID: dto.CompanyID,
-				Sort:      dto.Sort,
+				OrderNo:      dto.Sort,
 			}
 			if dto.PID != "" {
 				dept.PID = &dto.PID
@@ -1248,7 +1241,6 @@ func (u *PrivilegeUsecase) SyncEmployees(ctx context.Context, dtos []model.Privi
 	for _, dto := range dtos {
 		existing, _ := u.employeeRepo.FindByEmpCode(ctx, dto.EmpCode)
 		if existing != nil {
-			existing.UserCode = dto.UserCode
 			existing.DeptID = dto.DeptID
 			if err := u.employeeRepo.Update(ctx, existing); err != nil {
 				return err
@@ -1256,7 +1248,6 @@ func (u *PrivilegeUsecase) SyncEmployees(ctx context.Context, dtos []model.Privi
 		} else {
 			emp := &model.PrivilegeEmployee{
 				BaseModel: model.BaseModel{ID: genID()},
-				UserCode:  dto.UserCode,
 				EmpCode:   dto.EmpCode,
 				DeptID:    dto.DeptID,
 			}
@@ -1328,8 +1319,8 @@ func convertModuleTreeToUserMenus(tree []*model.ModuleTreeVO) []model.UserMenuVO
 			Code:     node.Code,
 			URL:      node.URL,
 			Icon:     node.Icon,
-			Sort:     node.Sort,
-			Type:     node.Type,
+			Sort:     node.OrderNo,
+			Type:     0 /* string→int */,
 			Children: convertModuleTreeChildren(node.Children),
 		}
 	}
@@ -1345,8 +1336,8 @@ func convertModuleTreeChildren(children []model.ModuleTreeVO) []model.UserMenuVO
 			Code:     child.Code,
 			URL:      child.URL,
 			Icon:     child.Icon,
-			Sort:     child.Sort,
-			Type:     child.Type,
+			Sort:     child.OrderNo,
+			Type:     0 /* string→int */,
 			Children: convertModuleTreeChildren(child.Children),
 		}
 	}

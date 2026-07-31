@@ -120,8 +120,8 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			moduleGroup.GET("/pid/:pid", moduleHandler.GetByPID)
 			moduleGroup.POST("", moduleHandler.Create)
 			moduleGroup.PUT("", moduleHandler.Update)
-			moduleGroup.GET("/:moduleId/pvalues", moduleHandler.GetPvalues)
-			moduleGroup.PUT("/:moduleId/pvalue/:position/:enabled", moduleHandler.UpdatePvalue)
+			moduleGroup.GET("/pvalues/:moduleId", moduleHandler.GetPvalues)
+			moduleGroup.PUT("/pvalue/:moduleId/:position/:enabled", moduleHandler.UpdatePvalue)
 		}
 
 		// ACL 管理
@@ -249,7 +249,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		front.POST("/harness/confirm", harnessHandler.Confirm)
 		if dataSvc != nil {
 			pqFrontHandler := agent.NewAgentPresetQuestionHandler(dataSvc)
-			front.GET("/:agentId/preset-questions", pqFrontHandler.List)
+			front.GET("/:id/preset-questions", pqFrontHandler.List)
 			front.POST("/addPresetQuestion", pqFrontHandler.Create)
 			front.DELETE("/deletePresetQuestion/:id", pqFrontHandler.Delete)
 		}
@@ -295,7 +295,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 
 		// ---- AgentDatasource (scoped under /api/agent/:agentId/datasource) ----
 		dsHandler := datasourceHandler.NewAgentDatasourceHandler(dataSvc)
-		dsGroup := dataAPI.Group("/agent/:agentId/datasource")
+		dsGroup := dataAPI.Group("/agent/:id/datasource")
 		{
 			dsGroup.GET("/page", dsHandler.Page)
 			dsGroup.GET("/:id", dsHandler.GetByID)
@@ -306,9 +306,9 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			dsGroup.GET("/:id/tables", dsHandler.GetTables)
 			dsGroup.POST("/:id/tables", dsHandler.SaveTables)
 		}
-		dataAPI.GET("/agent/:agentId/datasources", dsHandler.List)
-		dataAPI.GET("/agent/:agentId/datasources/active", dsHandler.GetActive)
-		dataAPI.POST("/agent/:agentId/datasources/init", dsHandler.InitSchema)
+		dataAPI.GET("/agent/:id/datasources", dsHandler.List)
+		dataAPI.GET("/agent/:id/datasources/active", dsHandler.GetActive)
+		dataAPI.POST("/agent/:id/datasources/init", dsHandler.InitSchema)
 
 		// ---- AgentKnowledge ----
 		knHandler := knowledgeHandler.NewAgentKnowledgeHandler(dataSvc, embeddingSvc)
@@ -326,7 +326,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 
 		// ---- AgentPresetQuestion (scoped under /api/agent/:agentId/preset-question) ----
 		pqHandler := agent.NewAgentPresetQuestionHandler(dataSvc)
-		pqGroup := dataAPI.Group("/agent/:agentId/preset-question")
+		pqGroup := dataAPI.Group("/agent/:id/preset-question")
 		{
 			pqGroup.GET("/page", pqHandler.Page)
 			pqGroup.GET("/", pqHandler.List)
@@ -337,8 +337,8 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		}
 
 		// ---- AgentPresetQuestion batch + account filter ----
-		dataAPI.GET("/agent/:agentId/:accountId/preset-questions", pqHandler.ListByAccount)
-		dataAPI.POST("/agent/:agentId/preset-questions", pqHandler.BatchSave)
+		dataAPI.GET("/agent/:id/:accountId/preset-questions", pqHandler.ListByAccount)
+		dataAPI.POST("/agent/:id/preset-questions", pqHandler.BatchSave)
 		// ---- Chat - Session & Message Management ----
 		chatHandler := chat.NewChatHandler(dataSvc)
 		dataAPI.GET("/agent/:id/sessions", chatHandler.ListSessions)
@@ -356,7 +356,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 
 		// ---- Session Events (SSE) ----
 		sessionEventHandler := chat.NewSessionEventHandler(dataSvc)
-		dataAPI.GET("/agent/:agentId/sessions/stream", sessionEventHandler.StreamSessions)
+		dataAPI.GET("/agent/:id/sessions/stream", sessionEventHandler.StreamSessions)
 
 		// ---- Datasource Management ----
 		dsDataHandler := datasourceHandler.NewDatasourceHandler(dataSvc)
@@ -448,7 +448,6 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		uploadGroup := dataAPI.Group("/upload")
 		{
 			uploadGroup.POST("/avatar", uploadHandler.UploadAvatar)
-			uploadGroup.GET("/*filepath", uploadHandler.GetFile)
 		}
 	}
 

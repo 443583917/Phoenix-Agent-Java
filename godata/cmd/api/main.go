@@ -51,6 +51,11 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	// 兜底: viper mapstructure 可能无法解析 time.Duration 字符串
+	if cfg.Auth.Expire == 0 {
+		cfg.Auth.Expire = 24 * time.Hour
+	}
+
 	// 初始化日志
 	if err := logger.Init(&cfg.Monitor); err != nil {
 		log.Fatalf("failed to init logger: %v", err)
@@ -106,7 +111,8 @@ func main() {
 		if err != nil {
 			zap.L().Fatal("failed to init casbin enforcer", zap.Error(err))
 		}
-		zap.L().Info("no casbin policy file found, enforcement disabled")
+		enforcer.EnableEnforce(false)
+			zap.L().Info("no casbin policy file found, enforcement disabled")
 	}
 	defer enforcer.EnableEnforce(false)
 
