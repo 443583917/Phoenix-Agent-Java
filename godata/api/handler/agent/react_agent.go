@@ -60,24 +60,7 @@ func (h *ReactAgentHandler) Chat(c *gin.Context) {
 //
 // Full implementation will be provided in Phase 5.
 func (h *ReactAgentHandler) StreamChatSQL(c *gin.Context) {
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Writer.WriteHeader(http.StatusOK)
-
-	flusher, ok := c.Writer.(http.Flusher)
-	if !ok {
-		return
-	}
-
-	event := model.ContentEvent{
-		Content: "Graph search streaming coming in Phase 5",
-		End:     true,
-	}
-	data, _ := json.Marshal(event)
-	fmt.Fprintf(c.Writer, "data: %s\n\n", data)
-	flusher.Flush()
+	c.Redirect(http.StatusTemporaryRedirect, "/api/stream/search?"+c.Request.URL.RawQuery)
 }
 
 // streamSSE writes model.SSEEvent values from the channel to the Gin response

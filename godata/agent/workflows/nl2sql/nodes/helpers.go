@@ -206,6 +206,10 @@ func GetPrompt(name string) string {
 		return prompts.PythonGeneratePrompt
 	case "report_generate":
 		return prompts.ReportGeneratePrompt
+	case "table_relation":
+		return prompts.TableRelationPrompt
+	case "python_analyze":
+		return prompts.PythonAnalyzePrompt
 	default:
 		return ""
 	}

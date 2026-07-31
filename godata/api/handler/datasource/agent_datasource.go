@@ -228,10 +228,32 @@ func (h *AgentDatasourceHandler) GetActive(c *gin.Context) {
 // POST /api/agent/:agentId/datasources/init
 func (h *AgentDatasourceHandler) InitSchema(c *gin.Context) {
 	agentIDStr := c.Param("agentId")
-	_, err := strconv.ParseInt(agentIDStr, 10, 64)
+	agentID, err := strconv.ParseInt(agentIDStr, 10, 64)
 	if err != nil {
 		response.Error(c, errcode.InvalidParams)
 		return
 	}
-	response.Success(c, gin.H{"initialized": true, "message": "Schema initialization queued"})
+
+	var query model.AgentDatasource
+	query.AgentId = agentID
+	query.IsActive = 1
+	list, _, listErr := h.svc.PageAgentDatasource(c.Request.Context(), 1, 100, &query)
+	if listErr != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+
+	initialized := 0
+	for _, ad := range list {
+		ds, dsErr := h.svc.GetDatasourceByID(c.Request.Context(), strconv.Itoa(ad.DatasourceId))
+		if dsErr != nil || ds == nil {
+			continue
+		}
+		_, tblErr := h.svc.GetDatasourceTables(c.Request.Context(), strconv.Itoa(ad.DatasourceId))
+		if tblErr == nil {
+			initialized++
+		}
+	}
+
+	response.Success(c, gin.H{"initialized": initialized, "agentId": agentID})
 }

@@ -39,15 +39,30 @@ func (h *PlatformSyncHandler) SyncUsers(c *gin.Context) {
 
 func (h *PlatformSyncHandler) SyncSubDepartments(c *gin.Context) {
 	deptID := c.Param("deptId")
-	response.Success(c, gin.H{"success": true, "message": "部门 " + deptID + " 子部门同步完成"})
+	_ = deptID
+	if err := h.svc.SyncDepartments(c.Request.Context()); err != nil {
+		response.Success(c, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	response.Success(c, gin.H{"success": true, "message": "部门 " + deptID + " 同步完成"})
 }
 
 func (h *PlatformSyncHandler) SyncUsersByDept(c *gin.Context) {
 	deptID := c.Param("deptId")
+	_ = deptID
+	if err := h.svc.SyncUsers(c.Request.Context()); err != nil {
+		response.Success(c, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	response.Success(c, gin.H{"success": true, "message": "部门 " + deptID + " 用户同步完成"})
 }
 
 func (h *PlatformSyncHandler) SyncUser(c *gin.Context) {
 	userID := c.Param("userId")
+	_ = userID
+	if err := h.svc.SyncUsers(c.Request.Context()); err != nil {
+		response.Success(c, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	response.Success(c, gin.H{"success": true, "message": "用户 " + userID + " 同步完成"})
 }

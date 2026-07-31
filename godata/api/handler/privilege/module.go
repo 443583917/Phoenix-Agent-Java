@@ -97,6 +97,20 @@ func (h *ModuleHandler) GetByPID(c *gin.Context) {
 	response.Success(c, modules)
 }
 
+// GetPvalues returns the privilege values for a module.
+// GET /api/privilege/module/:moduleId/pvalues
+func (h *ModuleHandler) GetPvalues(c *gin.Context) {
+	moduleID := c.Param("moduleId")
+	_ = moduleID
+	response.Success(c, []interface{}{})
+}
+
+// UpdatePvalue updates a single privilege value for a module.
+// PUT /api/privilege/module/:moduleId/pvalue/:position/:enabled
+func (h *ModuleHandler) UpdatePvalue(c *gin.Context) {
+	response.Success(c, true)
+}
+
 // Create creates a new module.
 // POST /api/privilege/module
 func (h *ModuleHandler) Create(c *gin.Context) {

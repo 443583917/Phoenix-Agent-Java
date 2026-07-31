@@ -9,6 +9,7 @@ import (
 	"github.com/phoenix-agent-go/agent/tools/datasource"
 	"github.com/phoenix-agent-go/agent/workflows/nl2sql/nodes"
 	nl2sqltypes "github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
+	"github.com/phoenix-agent-go/internal/config"
 	"trpc.group/trpc-go/trpc-agent-go/graph"
 	"trpc.group/trpc-go/trpc-agent-go/model"
 )
@@ -43,6 +44,7 @@ type NL2SQLGraph struct {
 	retriever   *knowledge.Retriever
 	dbManager   *datasource.DatasourceManager
 	humanReview bool
+	cfg         config.GraphConfig
 }
 
 // NewNL2SQLGraph creates a new NL2SQLGraph builder with dependencies.
@@ -51,12 +53,19 @@ func NewNL2SQLGraph(m model.Model, retriever *knowledge.Retriever, dbManager *da
 		llmService: nodes.NewLLMService(m),
 		retriever:  retriever,
 		dbManager:  dbManager,
+		cfg:        config.DefaultGraphConfig(),
 	}
 }
 
 // WithHumanReview enables human-in-the-loop review.
 func (g *NL2SQLGraph) WithHumanReview(enabled bool) *NL2SQLGraph {
 	g.humanReview = enabled
+	return g
+}
+
+// WithConfig overrides the default graph configuration.
+func (g *NL2SQLGraph) WithConfig(cfg config.GraphConfig) *NL2SQLGraph {
+	g.cfg = cfg
 	return g
 }
 
@@ -151,8 +160,7 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 		func(ctx context.Context, state graph.State) (string, error) {
 			nl2state := getState(state)
 			if nl2state != nil && nl2state.TableRelationException != "" &&
-				// TODO: use cfg.MaxSQLRetryCount (default 10)
-				nl2state.TableRelationRetryCount < 3 &&
+				nl2state.TableRelationRetryCount < g.cfg.MaxSQLRetryCount &&
 				isRetryableError(nl2state.TableRelationException) {
 				nl2state.TableRelationRetryCount++
 				nl2state.TableRelationException = ""
@@ -192,12 +200,17 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 			if nl2state == nil || nl2state.PlanNextNode == "" {
 				return sqlGenNode.Name(), nil
 			}
+			if nl2state.PlanValidationStatus == "failed" && nl2state.PlanRepairCount < g.cfg.MaxSQLRetryCount {
+				nl2state.PlanRepairCount++
+				return plannerNode.Name(), nil
+			}
 			return nl2state.PlanNextNode, nil
 		},
 		map[string]string{
 			sqlGenNode.Name():    sqlGenNode.Name(),
 			pythonGenNode.Name(): pythonGenNode.Name(),
 			reportNode.Name():    reportNode.Name(),
+			plannerNode.Name():   plannerNode.Name(),
 			graph.End:            graph.End,
 		},
 	)
@@ -217,8 +230,7 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 			generateCount := nl2state.SQLGenerateCount
 
 			// If validation failed AND we haven't retried too many times, go back to regenerate
-			// TODO: use cfg.MaxSQLRetryCount (default 10)
-			if strings.HasPrefix(consistency, "不通过") && generateCount < 3 {
+			if strings.HasPrefix(consistency, "不通过") && generateCount < g.cfg.MaxSQLRetryCount {
 				// Store retry reason
 				reason := strings.TrimPrefix(consistency, "不通过。")
 				nl2state.SQLRegenReason = &nl2sqltypes.SqlRetryDto{
@@ -248,8 +260,7 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 			generateCount := nl2state.SQLGenerateCount
 
 			// If execution failed AND we haven't retried too many times, retry SQL
-			// TODO: use cfg.MaxSQLRetryCount (default 10)
-			if (strings.Contains(executeOutput, "失败") || executeOutput == "") && generateCount < 3 {
+			if (strings.Contains(executeOutput, "失败") || executeOutput == "") && generateCount < g.cfg.MaxSQLRetryCount {
 				nl2state.SQLRegenReason = &nl2sqltypes.SqlRetryDto{
 					Reason:         "SQL执行失败: " + executeOutput,
 					SQLExecuteFail: true,
@@ -272,35 +283,45 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 		},
 	)
 
-	// ── Conditional edge 7: python_analyze -> human_feedback or report ──
+	// ── Conditional edge 7: python_analyze -> plan_executor or human_feedback or report ──
 	sg.AddConditionalEdges(pythonAnalyzeNode.Name(),
 		func(ctx context.Context, state graph.State) (string, error) {
 			nl2state := getState(state)
-			if nl2state != nil && nl2state.HumanReviewEnabled {
-				return humanFeedbackNode.Name(), nil
+			if nl2state != nil {
+				if nl2state.PlanNextNode != "" && nl2state.PlannerOutput != nil && nl2state.PlanCurrentStep < len(nl2state.PlannerOutput.ExecutionPlan) {
+					return planExecNode.Name(), nil
+				}
+				if nl2state.HumanReviewEnabled {
+					return humanFeedbackNode.Name(), nil
+				}
 			}
 			return reportNode.Name(), nil
 		},
 		map[string]string{
-			humanFeedbackNode.Name(): humanFeedbackNode.Name(),
-			reportNode.Name():        reportNode.Name(),
+			planExecNode.Name():       planExecNode.Name(),
+			humanFeedbackNode.Name():  humanFeedbackNode.Name(),
+			reportNode.Name():         reportNode.Name(),
 		},
 	)
 
-	// ── Conditional edge 8: human_feedback -> report or end ──
+	// ── Conditional edge 8: human_feedback -> planner (rejection) or report (approval) or end (waiting) ──
 	sg.AddConditionalEdges(humanFeedbackNode.Name(),
 		func(ctx context.Context, state graph.State) (string, error) {
 			nl2state := getState(state)
-			if nl2state != nil && nl2state.HumanFeedbackData != "" {
-				return reportNode.Name(), nil
+			if nl2state != nil {
+				if nl2state.PlanValidationError != "" {
+					return plannerNode.Name(), nil
+				}
+				if nl2state.HumanFeedbackData != "" {
+					return reportNode.Name(), nil
+				}
 			}
-			// If no feedback data and human review is enabled, this means
-			// the interrupt was triggered - end the graph (will resume later)
 			return graph.End, nil
 		},
 		map[string]string{
-			reportNode.Name(): reportNode.Name(),
-			graph.End:         graph.End,
+			plannerNode.Name(): plannerNode.Name(),
+			reportNode.Name():  reportNode.Name(),
+			graph.End:          graph.End,
 		},
 	)
 
@@ -314,7 +335,7 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 				return planExecNode.Name(), nil
 			}
 			// Check repair count
-			if nl2state.PlanRepairCount > 3 {
+			if nl2state.PlanRepairCount > g.cfg.MaxSQLRetryCount {
 				// Too many retries, go to report with whatever we have
 				return reportNode.Name(), nil
 			}
@@ -349,8 +370,7 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 	sg.AddConditionalEdges(pythonExecNode.Name(),
 		func(ctx context.Context, state graph.State) (string, error) {
 			nl2state := getState(state)
-			// TODO: use cfg.PythonMaxTriesCount (default 5)
-			if nl2state != nil && !nl2state.PythonIsSuccess && nl2state.PythonTriesCount < 3 {
+			if nl2state != nil && !nl2state.PythonIsSuccess && nl2state.PythonTriesCount < g.cfg.PythonMaxTriesCount {
 				// Retry Python with different code
 				return pythonGenNode.Name(), nil
 			}

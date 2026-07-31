@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/agent/runner"
 	"github.com/phoenix-agent-go/agent/runtime"
+	"github.com/phoenix-agent-go/agent/tools/datasource"
 	"github.com/phoenix-agent-go/api/handler/agent"
 	"github.com/phoenix-agent-go/api/handler/chat"
 	"github.com/phoenix-agent-go/api/handler/common"
@@ -20,14 +21,17 @@ import (
 	ragHandler "github.com/phoenix-agent-go/api/handler/rag"
 	semanticmodelHandler "github.com/phoenix-agent-go/api/handler/semanticmodel"
 	"github.com/phoenix-agent-go/api/middleware"
+	"github.com/phoenix-agent-go/agent/knowledge"
 	"github.com/phoenix-agent-go/infra/config"
 	"github.com/phoenix-agent-go/infra/jwt"
 	"github.com/phoenix-agent-go/infra/response"
 	"github.com/phoenix-agent-go/internal/service"
+	"github.com/phoenix-agent-go/internal/service/tracing"
 	"github.com/redis/go-redis/v9"
+	tmodel "trpc.group/trpc-go/trpc-agent-go/model"
 )
 
-func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService, dataSvc *service.DataService, ragSvc *service.RagService, kgSvc *service.KgService, agentManager *runtime.AgentManager, hitlHandler *runner.HitlHandler, rdb *redis.Client) *gin.Engine {
+func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *casbin.Enforcer, privilegeSvc *service.PrivilegeService, platformSvc *service.PlatformService, dataSvc *service.DataService, ragSvc *service.RagService, kgSvc *service.KgService, agentManager *runtime.AgentManager, hitlHandler *runner.HitlHandler, rdb *redis.Client, llmModel tmodel.Model, dbManager *datasource.DatasourceManager, retriever *knowledge.Retriever, mtcm *runtime.MultiTurnContextManager, tracingSvc *tracing.TracingService, embeddingSvc *service.EmbeddingService) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -75,6 +79,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			userGroup.PUT("", userHandler.Update)
 			userGroup.DELETE("/:id", userHandler.Delete)
 			userGroup.PUT("/password", userHandler.UpdatePassword)
+			userGroup.PUT("/setPassword", userHandler.SetPassword)
 			userGroup.PUT("/reset-password/:id", userHandler.ResetPassword)
 		}
 
@@ -115,6 +120,8 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			moduleGroup.GET("/pid/:pid", moduleHandler.GetByPID)
 			moduleGroup.POST("", moduleHandler.Create)
 			moduleGroup.PUT("", moduleHandler.Update)
+			moduleGroup.GET("/:moduleId/pvalues", moduleHandler.GetPvalues)
+			moduleGroup.PUT("/:moduleId/pvalue/:position/:enabled", moduleHandler.UpdatePvalue)
 		}
 
 		// ACL 管理
@@ -213,7 +220,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 	// 共用 handler（需提前创建以跨路由组复用）
 	reactAgentHandler := agent.NewReactAgentHandler(agentManager)
 	harnessHandler := agent.NewHarnessHandler(agentManager, hitlHandler)
-	graphHandler := chat.NewGraphHandler(dataSvc, nil, nil, nil, nil, nil)
+	graphHandler := chat.NewGraphHandler(dataSvc, llmModel, dbManager, retriever, mtcm, tracingSvc)
 
 	// Agent 路由（需 JWT）
 	admin := r.Group("/api/admin")
@@ -304,7 +311,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		dataAPI.POST("/agent/:agentId/datasources/init", dsHandler.InitSchema)
 
 		// ---- AgentKnowledge ----
-		knHandler := knowledgeHandler.NewAgentKnowledgeHandler(dataSvc, nil)
+		knHandler := knowledgeHandler.NewAgentKnowledgeHandler(dataSvc, embeddingSvc)
 		knGroup := dataAPI.Group("/agent-knowledge")
 		{
 			knGroup.GET("/page", knHandler.Page)

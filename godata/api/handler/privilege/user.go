@@ -158,6 +158,25 @@ func (h *UserHandler) UpdatePassword(c *gin.Context) {
 	response.Success(c, "密码修改成功")
 }
 
+// SetPassword sets a user's password directly (admin operation).
+// PUT /api/privilege/user/setPassword
+func (h *UserHandler) SetPassword(c *gin.Context) {
+	var dto model.PasswordUpdateDTO
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	if err := h.svc.UpdatePassword(c.Request.Context(), dto); err != nil {
+		if appErr, ok := err.(*usecase.AppError); ok {
+			response.ErrorWithMsg(c, errcode.ErrCode{Code: appErr.Code}, appErr.Msg)
+			return
+		}
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, true)
+}
+
 // ResetPassword resets a user's password to a random value and returns the plaintext.
 // PUT /api/privilege/user/reset-password/:id
 func (h *UserHandler) ResetPassword(c *gin.Context) {

@@ -15,9 +15,11 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/phoenix-agent-go/agent/hooks"
 	"github.com/phoenix-agent-go/agent/interceptors"
+	"github.com/phoenix-agent-go/agent/knowledge"
 	"github.com/phoenix-agent-go/agent/memory"
 	"github.com/phoenix-agent-go/agent/runner"
 	"github.com/phoenix-agent-go/agent/runtime"
+	"github.com/phoenix-agent-go/agent/tools/datasource"
 	"github.com/phoenix-agent-go/api"
 	infraCache "github.com/phoenix-agent-go/infra/cache"
 	"github.com/phoenix-agent-go/infra/config"
@@ -28,11 +30,13 @@ import (
 	cachePkg "github.com/phoenix-agent-go/internal/dao/cache"
 	"github.com/phoenix-agent-go/internal/dao/db"
 	"github.com/phoenix-agent-go/internal/service"
+	"github.com/phoenix-agent-go/internal/service/tracing"
 	"github.com/phoenix-agent-go/internal/usecase"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	tmodel "trpc.group/trpc-go/trpc-agent-go/model"
 	"trpc.group/trpc-go/trpc-agent-go/model/openai"
 	"trpc.group/trpc-go/trpc-agent-go/session/inmemory"
 
@@ -86,9 +90,22 @@ func main() {
 
 	// 初始化 Casbin 权限管理器
 	modelPath := filepath.Join("internal", "config", "casbin_model.conf")
-	enforcer, err := casbin.NewEnforcer(modelPath)
-	if err != nil {
-		zap.L().Fatal("failed to init casbin enforcer", zap.Error(err))
+	policyPath := filepath.Join("internal", "config", "casbin_policy.csv")
+	
+	var enforcer *casbin.Enforcer
+	if _, err := os.Stat(policyPath); err == nil {
+		enforcer, err = casbin.NewEnforcer(modelPath, policyPath)
+		if err != nil {
+			zap.L().Fatal("failed to init casbin enforcer with policy", zap.Error(err))
+		}
+		enforcer.EnableEnforce(true)
+		zap.L().Info("casbin enforcement enabled")
+	} else {
+		enforcer, err = casbin.NewEnforcer(modelPath)
+		if err != nil {
+			zap.L().Fatal("failed to init casbin enforcer", zap.Error(err))
+		}
+		zap.L().Info("no casbin policy file found, enforcement disabled")
 	}
 	defer enforcer.EnableEnforce(false)
 
@@ -137,8 +154,30 @@ func main() {
 	agentManager := initAgentManager(cfg, sessSvc, database, redisClient)
 	hitlHandler := runner.NewHitlHandler()
 
+	var llmModel tmodel.Model
+	if cfg.Agent.Model.APIKey != "" {
+		llmModel = openai.New(
+			cfg.Agent.Model.Model,
+			openai.WithBaseURL(cfg.Agent.Model.BaseURL),
+			openai.WithAPIKey(cfg.Agent.Model.APIKey),
+		)
+		zap.L().Info("LLM model initialized", zap.String("model", cfg.Agent.Model.Model))
+	}
+
+	dbManager := datasource.NewDatasourceManager()
+	mtcm := runtime.NewMultiTurnContextManager(5)
+	tracingSvc := tracing.NewTracingService()
+
+	var retriever *knowledge.Retriever
+
+	var embeddingSvc *service.EmbeddingService
+	if database != nil {
+		agentKnowledgeRepo := db.NewAgentKnowledgeRepository(database)
+		embeddingSvc = service.NewEmbeddingService(agentKnowledgeRepo)
+	}
+
 	// 设置路由
-	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc, dataSvc, ragSvc, kgSvc, agentManager, hitlHandler, redisClient)
+	router := api.SetupRouter(cfg, jwtManager, enforcer, privilegeSvc, platformSvc, dataSvc, ragSvc, kgSvc, agentManager, hitlHandler, redisClient, llmModel, dbManager, retriever, mtcm, tracingSvc, embeddingSvc)
 
 	// 启动服务
 	srv := &http.Server{

@@ -2,10 +2,10 @@ package nodes
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/phoenix-agent-go/agent/workflows/nl2sql/prompts"
 	nl2sqltypes "github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
 	"trpc.group/trpc-go/trpc-agent-go/graph"
 )
@@ -26,11 +26,6 @@ func (n *TableRelationNode) Name() string {
 // schema relationships, and generates a semantic model prompt with retry support.
 func (n *TableRelationNode) Execute(ctx context.Context, state graph.State) (any, error) {
 	nl2state := getOrCreateState(state)
-
-	query := getStateStr(state, nl2sqltypes.StateKeyInput)
-	if query == "" {
-		query, _ = state["user_input"].(string)
-	}
 
 	// Build schema context from table/column documents
 	tableDocs := nl2state.TableDocumentsForSchema
@@ -57,37 +52,23 @@ func (n *TableRelationNode) Execute(ctx context.Context, state graph.State) (any
 	}
 
 	// Use LLM to analyze table relations
-	prompt := `你是一个数据库表关系分析助手。请分析以下表结构，确定表之间的关系（外键关系、逻辑关联），并生成一个语义模型描述。
+	prompt := prompts.TableRelationPrompt
+	data := map[string]string{
+		"SchemaInfo": schemaInfo,
+		"DBDialect":  dialect,
+	}
 
-请输出JSON格式：
-{
-  "table_relation_description": "表关系描述，描述主外键关联、逻辑关系等",
-  "semantic_model_prompt": "用于SQL生成的语义模型提示，包含表名、字段名、类型、业务含义、关联关系等"
-}
-
-数据库方言：` + dialect + `
-
-用户查询：` + query + `
-
-` + schemaInfo
-
-	resp, err := n.LLM.Call(ctx, prompt, "请分析上述表结构并生成JSON输出。")
+	var result struct {
+		TableRelationDescription string `json:"tableRelationDescription"`
+		SemanticModelPrompt      string `json:"semanticModelPrompt"`
+	}
 
 	var tableRelation string
 	var semanticPrompt string
 
-	if err == nil {
-		jsonStr := extractJSON(resp)
-		if jsonStr != "" {
-			var result struct {
-				TableRelationDescription string `json:"table_relation_description"`
-				SemanticModelPrompt      string `json:"semantic_model_prompt"`
-			}
-			if json.Unmarshal([]byte(jsonStr), &result) == nil {
-				tableRelation = result.TableRelationDescription
-				semanticPrompt = result.SemanticModelPrompt
-			}
-		}
+	if err := n.LLM.CallJSON(ctx, prompt, data, &result); err == nil {
+		tableRelation = result.TableRelationDescription
+		semanticPrompt = result.SemanticModelPrompt
 	}
 
 	// Fallback

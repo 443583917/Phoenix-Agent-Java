@@ -51,6 +51,7 @@ func (h *GraphHandler) StreamSearch(c *gin.Context) {
 	humanFeedback := c.Query("humanFeedback")
 	humanFeedbackContent := c.Query("humanFeedbackContent")
 	nl2sqlOnly := c.Query("nl2sqlOnly")
+	rejectedPlan := c.Query("rejectedPlan")
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -98,6 +99,11 @@ func (h *GraphHandler) StreamSearch(c *gin.Context) {
 		HumanReviewEnabled: humanFeedback == "true",
 		HumanFeedbackData:  humanFeedbackContent,
 		IsOnlyNL2SQL:       nl2sqlOnly == "true",
+	}
+
+	if rejectedPlan != "" {
+		nl2State.PlanRepairCount = 1
+		nl2State.PlanValidationError = rejectedPlan
 	}
 
 	if h.mtcm != nil {

@@ -191,3 +191,37 @@ Python分析结果：{{.PythonAnalysis}}
 4. 如果有图表，使用![]()引用
 
 {{if .Continuation}}这是续写部分，请根据前面的内容继续完善报告。{{end}}`
+
+// ──────────────────────────── Table Relation ────────────────────────────
+
+// TableRelationPrompt analyzes table relationships and generates semantic model descriptions.
+const TableRelationPrompt = `你是表关系分析专家。请分析以下数据库表结构信息，识别表之间的逻辑关系（外键、关联关系）。
+
+表结构信息：
+{{.SchemaInfo}}
+
+数据库方言：{{.DBDialect}}
+
+请返回JSON格式：
+{
+    "tableRelationDescription": "表之间的逻辑关系描述",
+    "semanticModelPrompt": "基于表结构生成的语义模型描述"
+}`
+
+// ──────────────────────────── Python Analyze ────────────────────────────
+
+// PythonAnalyzePrompt generates data analysis reports from SQL and Python results.
+const PythonAnalyzePrompt = `你是数据分析专家。请根据以下信息生成分析报告：
+
+SQL查询结果：
+%s
+
+Python执行结果：
+%s
+
+请分析数据并给出关键洞察和建议。返回JSON格式：
+{
+    "analysis": "分析结果",
+    "keyInsights": ["关键洞察1", "关键洞察2"],
+    "recommendations": ["建议1", "建议2"]
+}`

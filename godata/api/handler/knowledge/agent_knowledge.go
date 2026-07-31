@@ -2,7 +2,11 @@ package knowledge
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/infra/errcode"
@@ -88,7 +92,13 @@ func (h *AgentKnowledgeHandler) Create(c *gin.Context) {
 			entity.SourceFilename = header.Filename
 			entity.FileType = header.Header.Get("Content-Type")
 			entity.FileSize = header.Size
-			// In a real implementation, save file to storage and set entity.FilePath.
+			uploadDir := "./storage/upload/knowledge"
+			os.MkdirAll(uploadDir, 0o755)
+			filename := fmt.Sprintf("%d_%s", time.Now().UnixNano(), header.Filename)
+			dst := filepath.Join(uploadDir, filename)
+			if saveErr := c.SaveUploadedFile(header, dst); saveErr == nil {
+				entity.FilePath = dst
+			}
 		}
 	}
 
