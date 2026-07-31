@@ -41,6 +41,7 @@ import (
 	"trpc.group/trpc-go/trpc-agent-go/session/inmemory"
 
 	"github.com/phoenix-agent-go/internal/dao/queue"
+	"github.com/phoenix-agent-go/internal/dao/vectorstore"
 )
 
 func main() {
@@ -174,6 +175,17 @@ func main() {
 	if database != nil {
 		agentKnowledgeRepo := db.NewAgentKnowledgeRepository(database)
 		embeddingSvc = service.NewEmbeddingService(agentKnowledgeRepo)
+	}
+
+	if cfg.Milvus.Addr != "" {
+		milvusStore, storeErr := vectorstore.NewMilvusStore(cfg.Milvus.Addr, internalConfig.DefaultVectorStoreConfig())
+		if storeErr != nil {
+			zap.L().Warn("milvus connect failed, vector search will be disabled", zap.Error(storeErr))
+		} else {
+			zap.L().Info("milvus connected", zap.String("addr", cfg.Milvus.Addr))
+			retriever = knowledge.NewRetrieverWithVectorStore(&milvusVectorStoreAdapter{store: milvusStore})
+			defer milvusStore.Close()
+		}
 	}
 
 	// 设置路由
@@ -465,4 +477,24 @@ func buildPrivilegeService(database *gorm.DB, cfg *config.AppConfig, redisClient
 
 	// Initialize service
 	return service.NewPrivilegeService(uc)
+}
+
+type milvusVectorStoreAdapter struct {
+	store *vectorstore.MilvusStore
+}
+
+func (a *milvusVectorStoreAdapter) Search(ctx context.Context, query string, embedding []float64, topK int) ([]knowledge.Document, error) {
+	results, err := a.store.Search(ctx, query, embedding, topK)
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]knowledge.Document, len(results))
+	for i, r := range results {
+		docs[i] = knowledge.Document{
+			ID:      r.ID,
+			Content: r.Content,
+			Score:   r.Score,
+		}
+	}
+	return docs, nil
 }
