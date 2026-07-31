@@ -25,3 +25,16 @@ cors:
 auth:
   secret: "${JWT_SECRET}"
   expire: "24h"
+graph:
+  max_sql_retry_count: 10
+  max_sql_optimize_count: 10
+  sql_score_threshold: 0.95
+  max_turn_history: 5
+  max_plan_length: 2000
+  max_columns_per_table: 150
+  enable_sql_result_chart: true
+  python_max_tries_count: 5
+  table_topk_limit: 10
+  table_similarity_threshold: 0.2
+  default_similarity_threshold: 0.4
+  default_topk_limit: 8

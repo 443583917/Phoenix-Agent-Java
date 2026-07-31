@@ -216,3 +216,17 @@ func (h *AccountInfoHandler) BatchStatus(c *gin.Context) {
 	}
 	response.Success(c, true)
 }
+
+// GetByStatus returns accounts filtered by status.
+// GET /platform/account-info/status/:status
+func (h *AccountInfoHandler) GetByStatus(c *gin.Context) {
+	status := c.Param("status")
+	var query model.AccountInfo
+	query.Status = status
+	list, _, err := h.svc.PageAccountInfo(c.Request.Context(), 1, 1000, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
+}

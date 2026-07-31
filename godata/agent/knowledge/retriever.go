@@ -20,10 +20,9 @@ type Embedder interface {
 	Embed(ctx context.Context, text string) ([]float64, error)
 }
 
-// VectorStore abstracts a vector-search backend so Retriever can work with
-// Milvus, Qdrant, Weaviate, or any compatible store.
+// VectorStore abstracts a vector-search backend for RAG retrieval.
 type VectorStore interface {
-	Search(ctx context.Context, vector []float64, topK int, filter string) ([]Document, error)
+	Search(ctx context.Context, query string, embedding []float64, topK int) ([]Document, error)
 }
 
 // Retriever wraps the tRPC-Agent-Go knowledge.BuiltinKnowledge for RAG
@@ -32,6 +31,7 @@ type VectorStore interface {
 // and hybrid search internally.
 type Retriever struct {
 	kb *knowledge.BuiltinKnowledge
+	vs VectorStore
 }
 
 // NewRetriever creates a new retriever backed by the tRPC-Agent-Go
@@ -63,6 +63,12 @@ func NewRetrieverWithFramework(kb *knowledge.BuiltinKnowledge) *Retriever {
 	return &Retriever{kb: kb}
 }
 
+// NewRetrieverWithVectorStore creates a retriever backed by a VectorStore.
+// When the VectorStore is available, Search delegates to it directly.
+func NewRetrieverWithVectorStore(vs VectorStore) *Retriever {
+	return &Retriever{vs: vs}
+}
+
 // Search performs hybrid retrieval using the tRPC-Agent-Go knowledge
 // framework. Hybrid search with reciprocal rank fusion is built into the
 // framework's SearchOptions.
@@ -71,8 +77,11 @@ func (r *Retriever) Search(ctx context.Context, query string, topK int) ([]Docum
 		topK = 5
 	}
 
+	if r.vs != nil {
+		return r.vs.Search(ctx, query, nil, topK)
+	}
+
 	if r.kb == nil {
-		// Fallback: no framework knowledge configured, return empty.
 		return nil, nil
 	}
 

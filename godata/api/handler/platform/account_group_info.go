@@ -92,6 +92,30 @@ func (h *AccountGroupInfoHandler) Update(c *gin.Context) {
 	response.Success(c, true)
 }
 
+func (h *AccountGroupInfoHandler) GetByGroupID(c *gin.Context) {
+	groupID := c.Param("groupId")
+	var query model.AccountGroupInfo
+	query.GroupID = groupID
+	list, _, err := h.svc.PageAccountGroupInfo(c.Request.Context(), 1, 1000, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
+}
+
+func (h *AccountGroupInfoHandler) GetByAccountID(c *gin.Context) {
+	accountID := c.Param("accountId")
+	var query model.AccountGroupInfo
+	query.AccountID = accountID
+	list, _, err := h.svc.PageAccountGroupInfo(c.Request.Context(), 1, 1000, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
+}
+
 // Delete soft-deletes an account-group association by its ID.
 // DELETE /platform/account-group-info/:id
 func (h *AccountGroupInfoHandler) Delete(c *gin.Context) {

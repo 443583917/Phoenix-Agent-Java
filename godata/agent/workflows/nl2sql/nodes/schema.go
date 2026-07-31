@@ -39,6 +39,7 @@ func (n *SchemaRecallNode) Execute(ctx context.Context, state graph.State) (any,
 
 	if n.Retriever != nil {
 		// Search for table schemas
+		// TODO: use cfg.TableTopkLimit (default 10)
 		tableResults, err := n.Retriever.Search(ctx, fmt.Sprintf("table schema %s", query), 10)
 		if err == nil {
 			for _, doc := range tableResults {
@@ -49,6 +50,7 @@ func (n *SchemaRecallNode) Execute(ctx context.Context, state graph.State) (any,
 		}
 
 		// Search for column details
+		// TODO: use cfg.DefaultTopkLimit (default 8) — current hardcoded value is 15
 		columnResults, err := n.Retriever.Search(ctx, fmt.Sprintf("column definition %s", query), 15)
 		if err == nil {
 			for _, doc := range columnResults {

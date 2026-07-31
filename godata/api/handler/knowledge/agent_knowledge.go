@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -13,12 +14,13 @@ import (
 
 // AgentKnowledgeHandler handles agent knowledge CRUD, recall toggle, and embedding retry.
 type AgentKnowledgeHandler struct {
-	svc *service.DataService
+	svc       *service.DataService
+	embedding *service.EmbeddingService
 }
 
 // NewAgentKnowledgeHandler creates a new AgentKnowledgeHandler.
-func NewAgentKnowledgeHandler(svc *service.DataService) *AgentKnowledgeHandler {
-	return &AgentKnowledgeHandler{svc: svc}
+func NewAgentKnowledgeHandler(svc *service.DataService, embedding *service.EmbeddingService) *AgentKnowledgeHandler {
+	return &AgentKnowledgeHandler{svc: svc, embedding: embedding}
 }
 
 // Page returns a paginated list of knowledge entries.
@@ -98,6 +100,9 @@ func (h *AgentKnowledgeHandler) Create(c *gin.Context) {
 		response.Error(c, errcode.InternalError)
 		return
 	}
+	if h.embedding != nil {
+		go h.embedding.TriggerEmbedding(context.Background(), entity.ID)
+	}
 	response.Success(c, entity)
 }
 
@@ -124,6 +129,9 @@ func (h *AgentKnowledgeHandler) Update(c *gin.Context) {
 // Delete soft-deletes a knowledge entry by its ID.
 // DELETE /api/agent-knowledge/:id
 func (h *AgentKnowledgeHandler) Delete(c *gin.Context) {
+	if h.embedding != nil {
+		go h.embedding.TriggerDeletion(context.Background(), c.Param("id"))
+	}
 	if err := h.svc.DeleteAgentKnowledge(c.Request.Context(), c.Param("id")); err != nil {
 		if appErr, ok := err.(*usecase.AppError); ok {
 			response.ErrorWithMsg(c, errcode.ErrCode{Code: appErr.Code}, appErr.Msg)

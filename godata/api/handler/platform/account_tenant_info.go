@@ -92,6 +92,18 @@ func (h *AccountTenantInfoHandler) Update(c *gin.Context) {
 	response.Success(c, true)
 }
 
+func (h *AccountTenantInfoHandler) GetByAccountID(c *gin.Context) {
+	accountID := c.Param("accountId")
+	var query model.AccountTenantInfo
+	query.AccountID = accountID
+	list, _, err := h.svc.PageAccountTenantInfo(c.Request.Context(), 1, 1000, &query)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+	response.Success(c, list)
+}
+
 // Delete soft-deletes an account-tenant association by its ID.
 // DELETE /platform/account-tenant-info/:id
 func (h *AccountTenantInfoHandler) Delete(c *gin.Context) {

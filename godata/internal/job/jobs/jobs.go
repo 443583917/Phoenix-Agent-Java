@@ -100,3 +100,23 @@ func (j *SessionCleanupJob) Run(ctx context.Context) error {
 	j.logger.Info("session cleanup completed", zap.Int64("closed", result.RowsAffected))
 	return nil
 }
+
+type KnowledgeResourceCleanupJob struct {
+	logger *zap.Logger
+}
+
+func NewKnowledgeResourceCleanupJob() *KnowledgeResourceCleanupJob {
+	return &KnowledgeResourceCleanupJob{logger: zap.L().Named("job.knowledge_cleanup")}
+}
+
+func (j *KnowledgeResourceCleanupJob) Name() string {
+	return "knowledge_resource_cleanup"
+}
+
+func (j *KnowledgeResourceCleanupJob) Run(ctx context.Context) error {
+	j.logger.Info("cleaning up orphaned knowledge resources")
+	// TODO: find soft-deleted knowledge with is_resource_cleaned = 0
+	// TODO: delete associated vector store entries and files
+	// TODO: set is_resource_cleaned = 1
+	return nil
+}

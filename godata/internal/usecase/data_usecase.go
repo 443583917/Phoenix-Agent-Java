@@ -622,6 +622,17 @@ func (u *DataUsecase) GetSessionMessages(ctx context.Context, sessionID string) 
 	return u.chatMessageRepo.FindBySessionID(ctx, sessionID)
 }
 
+func (u *DataUsecase) GetChatSessionByID(ctx context.Context, sessionID string) (*model.ChatSession, error) {
+	entity, err := u.chatSessionRepo.FindByID(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if entity == nil {
+		return nil, ErrChatSessionNotFound
+	}
+	return entity, nil
+}
+
 func (u *DataUsecase) AddChatMessage(ctx context.Context, entity *model.ChatMessage) (*model.ChatMessage, error) {
 	entity.ID = dataGenID()
 	if err := u.chatMessageRepo.Create(ctx, entity); err != nil {

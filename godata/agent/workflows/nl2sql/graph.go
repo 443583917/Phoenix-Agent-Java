@@ -114,15 +114,57 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 	// ── Linear edges ──
 	// sg.AddEdge(intentNode.Name(), evidenceNode.Name()) -- routed via conditional edge
 	sg.AddEdge(evidenceNode.Name(), queryEnhanceNode.Name())
-	sg.AddEdge(queryEnhanceNode.Name(), schemaNode.Name())
-	sg.AddEdge(schemaNode.Name(), tableRelationNode.Name())
+	sg.AddConditionalEdges(queryEnhanceNode.Name(),
+		func(ctx context.Context, state graph.State) (string, error) {
+			nl2state := getState(state)
+			if nl2state != nil && nl2state.QueryEnhanceOutput != nil && nl2state.QueryEnhanceOutput.CanonicalQuery != "" {
+				return schemaNode.Name(), nil
+			}
+			return graph.End, nil
+		},
+		map[string]string{
+			schemaNode.Name(): schemaNode.Name(),
+			graph.End:         graph.End,
+		},
+	)
+
+	sg.AddConditionalEdges(schemaNode.Name(),
+		func(ctx context.Context, state graph.State) (string, error) {
+			nl2state := getState(state)
+			if nl2state != nil && len(nl2state.TableDocumentsForSchema) > 0 {
+				return tableRelationNode.Name(), nil
+			}
+			return graph.End, nil
+		},
+		map[string]string{
+			tableRelationNode.Name(): tableRelationNode.Name(),
+			graph.End:                graph.End,
+		},
+	)
 	sg.AddEdge(plannerNode.Name(), planExecNode.Name())
 	sg.AddEdge(pythonGenNode.Name(), pythonExecNode.Name())
 	sg.AddEdge(pythonExecNode.Name(), pythonAnalyzeNode.Name())
 	sg.AddEdge(reportNode.Name(), graph.End)
 
-	// ── Conditional edge 1: table_relation -> feasibility_assessment (always) ──
-	sg.AddEdge(tableRelationNode.Name(), feasibilityNode.Name())
+	// ── Conditional edge: table_relation -> feasibility (with self-loop retry) ──
+	sg.AddConditionalEdges(tableRelationNode.Name(),
+		func(ctx context.Context, state graph.State) (string, error) {
+			nl2state := getState(state)
+			if nl2state != nil && nl2state.TableRelationException != "" &&
+				// TODO: use cfg.MaxSQLRetryCount (default 10)
+				nl2state.TableRelationRetryCount < 3 &&
+				isRetryableError(nl2state.TableRelationException) {
+				nl2state.TableRelationRetryCount++
+				nl2state.TableRelationException = ""
+				return tableRelationNode.Name(), nil
+			}
+			return feasibilityNode.Name(), nil
+		},
+		map[string]string{
+			tableRelationNode.Name(): tableRelationNode.Name(),
+			feasibilityNode.Name():   feasibilityNode.Name(),
+		},
+	)
 
 	// ── Conditional edge 2: feasibility_assessment -> planner or end ──
 	sg.AddConditionalEdges(feasibilityNode.Name(),
@@ -175,6 +217,7 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 			generateCount := nl2state.SQLGenerateCount
 
 			// If validation failed AND we haven't retried too many times, go back to regenerate
+			// TODO: use cfg.MaxSQLRetryCount (default 10)
 			if strings.HasPrefix(consistency, "不通过") && generateCount < 3 {
 				// Store retry reason
 				reason := strings.TrimPrefix(consistency, "不通过。")
@@ -205,6 +248,7 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 			generateCount := nl2state.SQLGenerateCount
 
 			// If execution failed AND we haven't retried too many times, retry SQL
+			// TODO: use cfg.MaxSQLRetryCount (default 10)
 			if (strings.Contains(executeOutput, "失败") || executeOutput == "") && generateCount < 3 {
 				nl2state.SQLRegenReason = &nl2sqltypes.SqlRetryDto{
 					Reason:         "SQL执行失败: " + executeOutput,
@@ -305,6 +349,7 @@ func (g *NL2SQLGraph) Build() (*graph.Graph, error) {
 	sg.AddConditionalEdges(pythonExecNode.Name(),
 		func(ctx context.Context, state graph.State) (string, error) {
 			nl2state := getState(state)
+			// TODO: use cfg.PythonMaxTriesCount (default 5)
 			if nl2state != nil && !nl2state.PythonIsSuccess && nl2state.PythonTriesCount < 3 {
 				// Retry Python with different code
 				return pythonGenNode.Name(), nil
@@ -339,3 +384,7 @@ func reflectType[T any]() reflect.Type {
 var (
 	_ = NewNL2SQLGraph
 )
+
+func isRetryableError(err string) bool {
+	return strings.Contains(err, "timeout") || strings.Contains(err, "连接") || strings.Contains(err, "超时") || strings.Contains(err, "retry")
+}

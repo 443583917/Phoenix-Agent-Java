@@ -69,6 +69,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		{
 			userGroup.GET("/page", userHandler.Page)
 			userGroup.GET("/:id", userHandler.GetByID)
+			userGroup.GET("/username/:username", userHandler.GetByUsername)
 			userGroup.GET("/code/:code", userHandler.GetByCode)
 			userGroup.POST("", userHandler.Create)
 			userGroup.PUT("", userHandler.Update)
@@ -209,18 +210,21 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		}
 	}
 
+	// 共用 handler（需提前创建以跨路由组复用）
+	reactAgentHandler := agent.NewReactAgentHandler(agentManager)
+	harnessHandler := agent.NewHarnessHandler(agentManager, hitlHandler)
+	graphHandler := chat.NewGraphHandler(dataSvc, nil, nil, nil, nil, nil)
+
 	// Agent 路由（需 JWT）
 	admin := r.Group("/api/admin")
 	admin.Use(middleware.Auth(jwtManager))
 	{
-		reactAgentHandler := agent.NewReactAgentHandler(agentManager)
 		agentGroup := admin.Group("/agent")
 		{
 			agentGroup.POST("/chat", reactAgentHandler.Chat)
 			agentGroup.GET("/stream/chatsql", reactAgentHandler.StreamChatSQL)
 		}
 
-		harnessHandler := agent.NewHarnessHandler(agentManager, hitlHandler)
 		harnessGroup := admin.Group("/harness")
 		{
 			harnessGroup.POST("/chat", harnessHandler.Chat)
@@ -228,6 +232,21 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		}
 	}
 
+	// ================ 前端 C 端路由 (/api/front) ================
+	front := r.Group("/api/front")
+	front.Use(middleware.Auth(jwtManager))
+	{
+		front.POST("/stream/chat", reactAgentHandler.Chat)
+		front.GET("/stream/chatsql", graphHandler.StreamSearch)
+		front.POST("/harness/chat", harnessHandler.Chat)
+		front.POST("/harness/confirm", harnessHandler.Confirm)
+		if dataSvc != nil {
+			pqFrontHandler := agent.NewAgentPresetQuestionHandler(dataSvc)
+			front.GET("/:agentId/preset-questions", pqFrontHandler.List)
+			front.POST("/addPresetQuestion", pqFrontHandler.Create)
+			front.DELETE("/deletePresetQuestion/:id", pqFrontHandler.Delete)
+		}
+	}
 
 	// 数据管理路由（需 JWT）
 	dataAPI := r.Group("/api")
@@ -285,7 +304,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		dataAPI.POST("/agent/:agentId/datasources/init", dsHandler.InitSchema)
 
 		// ---- AgentKnowledge ----
-		knHandler := knowledgeHandler.NewAgentKnowledgeHandler(dataSvc)
+		knHandler := knowledgeHandler.NewAgentKnowledgeHandler(dataSvc, nil)
 		knGroup := dataAPI.Group("/agent-knowledge")
 		{
 			knGroup.GET("/page", knHandler.Page)
@@ -326,7 +345,6 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		dataAPI.POST("/sessions/:id/reports/html", chatHandler.GenerateReportHTML)
 
 		// ---- Graph Search (SSE) ----
-		graphHandler := chat.NewGraphHandler(dataSvc, nil, nil, nil)
 		dataAPI.GET("/stream/search", graphHandler.StreamSearch)
 
 		// ---- Session Events (SSE) ----
@@ -479,6 +497,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			acct.GET("/username/:username", acctHandler.GetByUsername)
 			acct.GET("/code/:code", acctHandler.GetByCode)
 			acct.GET("/third-party/:thirdPartyId", acctHandler.GetByThirdPartyID)
+			acct.GET("/status/:status", acctHandler.GetByStatus)
 			acct.GET("/list", acctHandler.List)
 			acct.GET("/getMyAgents", acctHandler.GetMyAgents)
 			acct.GET("/getUnGroupPageByGroupId", acctHandler.GetUnGroupPageByGroupId)
@@ -494,6 +513,8 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		{
 			ag.GET("/page", agHandler.Page)
 			ag.GET("/:id", agHandler.GetByID)
+			ag.GET("/group/:groupId", agHandler.GetByGroupID)
+			ag.GET("/account/:accountId", agHandler.GetByAccountID)
 			ag.POST("", agHandler.Create)
 			ag.PUT("", agHandler.Update)
 			ag.DELETE("/:id", agHandler.Delete)
@@ -505,6 +526,7 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 		{
 			at.GET("/page", atHandler.Page)
 			at.GET("/:id", atHandler.GetByID)
+			at.GET("/account/:accountId", atHandler.GetByAccountID)
 			at.POST("", atHandler.Create)
 			at.PUT("", atHandler.Update)
 			at.DELETE("/:id", atHandler.Delete)
@@ -542,6 +564,9 @@ func SetupRouter(cfg *config.AppConfig, jwtManager *jwt.JWTManager, enforcer *ca
 			sync.POST("/all", syncHandler.SyncAll)
 			sync.POST("/departments", syncHandler.SyncDepartments)
 			sync.POST("/users", syncHandler.SyncUsers)
+			sync.POST("/depts/:deptId", syncHandler.SyncSubDepartments)
+			sync.POST("/depts/users/:deptId", syncHandler.SyncUsersByDept)
+			sync.POST("/users/:userId", syncHandler.SyncUser)
 		}
 	}
 

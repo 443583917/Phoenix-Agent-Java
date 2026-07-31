@@ -175,6 +175,9 @@ func (s *DataService) RenameSession(ctx context.Context, id string, title string
 func (s *DataService) GetSessionMessages(ctx context.Context, sessionID string) ([]*model.ChatMessage, error) {
 	return s.uc.GetSessionMessages(ctx, sessionID)
 }
+func (s *DataService) GetChatSessionByID(ctx context.Context, sessionID string) (*model.ChatSession, error) {
+	return s.uc.GetChatSessionByID(ctx, sessionID)
+}
 func (s *DataService) AddChatMessage(ctx context.Context, entity *model.ChatMessage) (*model.ChatMessage, error) {
 	return s.uc.AddChatMessage(ctx, entity)
 }

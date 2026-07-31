@@ -9,10 +9,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/phoenix-agent-go/agent/knowledge"
+	"github.com/phoenix-agent-go/agent/runtime"
 	"github.com/phoenix-agent-go/agent/tools/datasource"
 	"github.com/phoenix-agent-go/agent/workflows/nl2sql"
 	nl2sqltypes "github.com/phoenix-agent-go/agent/workflows/nl2sql/types"
 	"github.com/phoenix-agent-go/internal/service"
+	"github.com/phoenix-agent-go/internal/service/tracing"
+	"go.opentelemetry.io/otel/trace"
 	"trpc.group/trpc-go/trpc-agent-go/agent"
 	"trpc.group/trpc-go/trpc-agent-go/event"
 	"trpc.group/trpc-go/trpc-agent-go/graph"
@@ -24,16 +27,20 @@ type GraphHandler struct {
 	llm       model.Model
 	dbManager *datasource.DatasourceManager
 	retriever *knowledge.Retriever
+	mtcm      *runtime.MultiTurnContextManager
+	tracing   *tracing.TracingService
 	mu        sync.Mutex
 	cached    *graph.Graph
 }
 
-func NewGraphHandler(svc *service.DataService, llm model.Model, dbManager *datasource.DatasourceManager, retriever *knowledge.Retriever) *GraphHandler {
+func NewGraphHandler(svc *service.DataService, llm model.Model, dbManager *datasource.DatasourceManager, retriever *knowledge.Retriever, mtcm *runtime.MultiTurnContextManager, tracing *tracing.TracingService) *GraphHandler {
 	return &GraphHandler{
 		svc:       svc,
 		llm:       llm,
 		dbManager: dbManager,
 		retriever: retriever,
+		mtcm:      mtcm,
+		tracing:   tracing,
 	}
 }
 
@@ -69,6 +76,14 @@ func (h *GraphHandler) StreamSearch(c *gin.Context) {
 		return
 	}
 
+	if h.mtcm != nil {
+		if humanFeedback == "true" {
+			h.mtcm.RestartLastTurn(threadID)
+		} else {
+			h.mtcm.BeginTurn(threadID)
+		}
+	}
+
 	g, err := h.getOrBuildGraph(humanFeedback == "true")
 	if err != nil {
 		sendSSE(c.Writer, flusher, "error", map[string]interface{}{
@@ -83,6 +98,12 @@ func (h *GraphHandler) StreamSearch(c *gin.Context) {
 		HumanReviewEnabled: humanFeedback == "true",
 		HumanFeedbackData:  humanFeedbackContent,
 		IsOnlyNL2SQL:       nl2sqlOnly == "true",
+	}
+
+	if h.mtcm != nil {
+		if ctxStr := h.mtcm.BuildContext(threadID); ctxStr != "" {
+			nl2State.MultiTurnContext = ctxStr
+		}
 	}
 
 	initialState := graph.State{
@@ -111,23 +132,48 @@ func (h *GraphHandler) StreamSearch(c *gin.Context) {
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	defer cancel()
 
+	var span trace.Span
+	if h.tracing != nil {
+		ctx, span = h.tracing.StartGraphSpan(ctx, threadID, query)
+	}
+
 	eventChan, err := executor.Execute(ctx, initialState, inv)
 	if err != nil {
+		if h.tracing != nil {
+			h.tracing.RecordError(span, err)
+			span.End()
+		}
+		if h.mtcm != nil {
+			h.mtcm.DiscardPending(threadID)
+		}
 		sendSSE(c.Writer, flusher, "error", map[string]interface{}{
 			"message": fmt.Sprintf("Graph execution error: %s", err.Error()),
 		})
 		return
 	}
 
+	var lastResponse string
 	for {
 		select {
 		case <-ctx.Done():
+			if h.mtcm != nil {
+				h.mtcm.DiscardPending(threadID)
+			}
+			if h.tracing != nil {
+				span.End()
+			}
 			sendSSE(c.Writer, flusher, "complete", map[string]interface{}{
 				"message": "Client disconnected",
 			})
 			return
 		case evt, ok := <-eventChan:
 			if !ok {
+				if h.mtcm != nil {
+					h.mtcm.FinishTurn(threadID, query, lastResponse)
+				}
+				if h.tracing != nil {
+					h.tracing.EndSpan(span, lastResponse)
+				}
 				sendSSE(c.Writer, flusher, "complete", map[string]interface{}{
 					"message": "Graph execution completed",
 				})
@@ -140,6 +186,18 @@ func (h *GraphHandler) StreamSearch(c *gin.Context) {
 				sendSSE(c.Writer, flusher, "state_update", map[string]interface{}{
 					"state_delta": evt.StateDelta,
 				})
+				if raw, ok := evt.StateDelta["nl2sql_state"]; ok && len(raw) > 0 {
+					var delta nl2sqltypes.NL2SQLState
+					if err := json.Unmarshal(raw, &delta); err == nil {
+						if delta.Result != "" {
+							lastResponse = delta.Result
+						} else if delta.SQLExecuteOutput != "" {
+							lastResponse = delta.SQLExecuteOutput
+						} else if delta.PythonAnalyzeOutput != "" {
+							lastResponse = delta.PythonAnalyzeOutput
+						}
+					}
+				}
 			}
 		}
 	}

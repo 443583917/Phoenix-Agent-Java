@@ -81,6 +81,10 @@ func (s *PrivilegeService) GetUserByCode(ctx context.Context, code string) (*mod
 	return s.uc.GetUserByCode(ctx, code)
 }
 
+func (s *PrivilegeService) GetUserByUsername(ctx context.Context, username string) (*model.PrivilegeUserVO, error) {
+	return s.uc.GetUserByUsername(ctx, username)
+}
+
 // ──────────────────────────── Role ────────────────────────────
 
 // CreateRole creates a new privilege role.

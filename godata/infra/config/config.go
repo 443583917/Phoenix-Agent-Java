@@ -21,6 +21,7 @@ type AppConfig struct {
 	RPC      appcfg.RPCConfig
 	Cors     appcfg.CorsConfig
 	Auth     appcfg.AuthConfig
+	Graph    appcfg.GraphConfig
 }
 
 func Load(serviceName string) (*AppConfig, error) {
@@ -105,6 +106,9 @@ func Load(serviceName string) (*AppConfig, error) {
 		return nil, err
 	}
 	if err := v.UnmarshalKey("auth", &cfg.Auth); err != nil {
+		return nil, err
+	}
+	if err := v.UnmarshalKey("graph", &cfg.Graph); err != nil {
 		return nil, err
 	}
 

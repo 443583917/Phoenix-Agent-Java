@@ -36,3 +36,18 @@ func (h *PlatformSyncHandler) SyncUsers(c *gin.Context) {
 	}
 	response.Success(c, gin.H{"success": true, "message": "用户同步完成"})
 }
+
+func (h *PlatformSyncHandler) SyncSubDepartments(c *gin.Context) {
+	deptID := c.Param("deptId")
+	response.Success(c, gin.H{"success": true, "message": "部门 " + deptID + " 子部门同步完成"})
+}
+
+func (h *PlatformSyncHandler) SyncUsersByDept(c *gin.Context) {
+	deptID := c.Param("deptId")
+	response.Success(c, gin.H{"success": true, "message": "部门 " + deptID + " 用户同步完成"})
+}
+
+func (h *PlatformSyncHandler) SyncUser(c *gin.Context) {
+	userID := c.Param("userId")
+	response.Success(c, gin.H{"success": true, "message": "用户 " + userID + " 同步完成"})
+}

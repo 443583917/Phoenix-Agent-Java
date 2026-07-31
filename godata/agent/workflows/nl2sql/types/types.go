@@ -142,6 +142,10 @@ type NL2SQLState struct {
 	HumanReviewEnabled bool   `json:"human_review_enabled"`
 	HumanFeedbackData  string `json:"human_feedback_data,omitempty"`
 
+	// Trace
+	TraceThreadID          string `json:"traceThreadId,omitempty"`
+	SQLSchemaMissingAdvice string `json:"sqlSchemaMissingAdvice,omitempty"`
+
 	// Result
 	Result string `json:"result,omitempty"`
 

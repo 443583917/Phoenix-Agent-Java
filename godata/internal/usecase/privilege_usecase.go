@@ -335,6 +335,18 @@ func (u *PrivilegeUsecase) GetUserByCode(ctx context.Context, code string) (*mod
 	return userToVO(user), nil
 }
 
+// GetUserByUsername returns a single user by their username.
+func (u *PrivilegeUsecase) GetUserByUsername(ctx context.Context, username string) (*model.PrivilegeUserVO, error) {
+	user, err := u.userRepo.FindByUsername(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+	return userToVO(user), nil
+}
+
 // ──────────────────────────── Role ────────────────────────────
 
 // CreateRole creates a new privilege role.

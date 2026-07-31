@@ -69,6 +69,21 @@ func (h *UserHandler) GetByCode(c *gin.Context) {
 	response.Success(c, user)
 }
 
+// GetByUsername returns a single user by its username.
+// GET /api/privilege/user/username/:username
+func (h *UserHandler) GetByUsername(c *gin.Context) {
+	user, err := h.svc.GetUserByUsername(c.Request.Context(), c.Param("username"))
+	if err != nil {
+		if appErr, ok := err.(*usecase.AppError); ok {
+			response.ErrorWithMsg(c, errcode.ErrCode{Code: appErr.Code}, appErr.Msg)
+			return
+		}
+		response.Error(c, errcode.NotFound)
+		return
+	}
+	response.Success(c, user)
+}
+
 // Create creates a new user with a default password.
 // POST /api/privilege/user
 func (h *UserHandler) Create(c *gin.Context) {
